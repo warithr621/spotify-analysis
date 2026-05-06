@@ -1,4 +1,0 @@
-{
-  "client_id": "PASTE_YOUR_SPOTIFY_APP_CLIENT_ID_HERE",
-  "redirect_uri": "http://127.0.0.1:8765/callback"
-}
