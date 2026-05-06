@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.[USERNAME].spotify-serve</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/[USERNAME]/venv/bin/python</string> <!-- this is where my venv is, change this accordingly -->
+      <string>/Users/[USERNAME]/Downloads/spotify-analysis/serve.py</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/[USERNAME]/Downloads/spotify-analysis</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/[USERNAME]/Library/Application Support/spotify-dashboard/serve.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/[USERNAME]/Library/Application Support/spotify-dashboard/serve.err.log</string>
+  </dict>
+</plist>

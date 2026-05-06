@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.[USERNAME].spotify-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>/Users/[USERNAME]/Library/Application Support/spotify-dashboard/refresh_spotify.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/[USERNAME]/Library/Application Support/spotify-dashboard/refresh.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/[USERNAME]/Library/Application Support/spotify-dashboard/refresh.err.log</string>
+  </dict>
+</plist>

@@ -53,3 +53,29 @@ From the dashboard, click **Refresh Spotify data** to authorize Spotify and fetc
 Spotify's API only lets you fetch the 50 most recently played songs. If you want your all-time statistics, first request your Extended Streaming History from [this link](https://www.spotify.com/us/account/privacy/). After a few days (it should be way less than the advertised 30 days), you should get emailed a ZIP file with several JSON files, all named something like `Streaming_History_Audio_2026.json`.
 
 If you put all these JSONs in the same directory and rerun the serve, the app will automatically read all these files and include them in the statistics.
+
+# Background Serving and Refreshing
+
+These are Mac-only instructions if you wish to have the dashboard serve in the background, and automatically refresh every hour while your computer is on.
+
+1. Install `launchctl` if you don't have it already:
+
+	```bash
+	brew install launchctl
+	```
+
+2. Replace the `USERNAME` in both `.plist` files of this directory with your computer's username. Do the same in the `[USERNAME]` section of both of these, as well as the `spotify_refresh.sh` file.
+
+3. Create the directory `/Users/[USERNAME]/Library/Application Support/spotify-dashboard`, and move the script `spotify_refresh.sh` there.
+
+4. Move the two `.plist` files into `~/Library/LaunchAgents/`.
+
+5. Run the following commands:
+
+	```bash
+	plutil -lint ~/Library/LaunchAgents/com.USERNAME.spotify-refresh.plist
+	plutil -lint ~/Library/LaunchAgents/com.USERNAME.spotify-serve.plist
+	launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.USERNAME.spotify-refresh.plist
+	launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.USERNAME.spotify-serve.plist
+	launchctl kickstart -k gui/$(id -u)/com.USERNAME.spotify-serve
+	```
