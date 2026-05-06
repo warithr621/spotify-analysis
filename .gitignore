@@ -1,0 +1,49 @@
+# hm i sure hope copilot didnt forget anything!!
+
+# macOS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python build and cache artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Local environments and dotenv files
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Spotify local config, auth state, and generated outputs
+spotify_config.json
+spotify_tokens.json
+.refresh.lock
+.refresh.last.json
+.spotify_tokens.*.tmp
+.live_audio.*.tmp
+dashboard.html
+Streaming_History_Audio_*.json
