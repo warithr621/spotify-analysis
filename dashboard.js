@@ -201,7 +201,6 @@ function renderKpis({ fromDay, toDay }) {
 
   const rows = [
     ["Filtered listening time", fmtMin(minutesTotal), plays ? `${fmtNum(plays)} plays` : ""],
-    ["Active days in range", fmtNum(uniqDays), `${fromDay} -> ${toDay}`],
     ["Artists in window", fmtNum(uniqArtistsApprox), ""],
     ["Tracks in window", fmtNum(tr), ""],
     ["Peak streaming month", peak.m || "—", peak.m ? fmtMin(peak.ms / 60000) : ""],
@@ -538,7 +537,7 @@ function bootstrap(){
   const parts = [];
   if (DATA.coverage.latest_event_utc) {
     parts.push(
-      "Latest row in export (shown in Central Time): " +
+      "Latest row in export: " +
         formatLatestEventChicago(DATA.coverage.latest_event_utc)
     );
   }
@@ -549,9 +548,9 @@ function bootstrap(){
 
   document.getElementById('pills-host').innerHTML = `
     <span class="pill"><strong>${fmtMin(DATA.totals.minutes)}</strong> cumulative minutes exported</span>
-    <span class="pill">${fmtNum(DATA.totals.streams)} tracked plays</span>
-    <span class="pill">${fmtNum(DATA.totals.unique_artists)} unique artists catalog-wide</span>
-    <span class="pill">${fmtNum(DATA.totals.unique_tracks)} unique tracks catalog-wide</span>
+    <span class="pill"><strong>${fmtNum(DATA.totals.streams)}</strong> tracked plays</span>
+    <span class="pill"><strong>${fmtNum(DATA.totals.unique_artists)}</strong> unique artists listened to</span>
+    <span class="pill"><strong>${fmtNum(DATA.totals.unique_tracks)}</strong> unique tracks heard</span>
   `;
 
   state.fromDay = earliest;

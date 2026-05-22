@@ -31,11 +31,7 @@ body {
   overflow-x: clip;
   max-width: 100vw;
   font-family: var(--font-body);
-  background:
-    radial-gradient(ellipse 920px 520px at 12% -8%, rgba(244, 114, 182, 0.35), transparent 58%),
-    radial-gradient(ellipse 760px 460px at 88% 8%, rgba(192, 132, 252, 0.38), transparent 52%),
-    radial-gradient(ellipse 700px 420px at 50% 108%, rgba(233, 213, 255, 0.95), transparent 52%),
-    linear-gradient(165deg, #fef7ff 0%, #f5ebff 38%, #ede4ff 72%, #fae8ff 100%);
+  background: linear-gradient(to bottom, #fef7ff, #f0e5ff);
   color: var(--text);
   line-height: 1.55;
   font-weight: 400;
@@ -129,9 +125,9 @@ header.hero {
   gap: 1rem;
 }
 h1 {
-  font-family: var(--font-display);
+  font-family: "Dancing Script", cursive;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   font-size: clamp(2rem, 4vw, 2.75rem);
   margin: 0;
   line-height: 1.1;
@@ -144,7 +140,7 @@ h1 {
   line-height: 1.5;
 }
 .hero-data-note {
-  margin: 0.65rem auto 0;
+  margin: 0.65rem auto 0.5rem;
   max-width: 44rem;
   padding: 0.55rem 0.85rem;
   border-radius: 999px;
@@ -168,7 +164,7 @@ h1 {
   font-size: 0.78rem;
   color: var(--muted);
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.06);
+  box-shadow: none;
 }
 .pill strong { color: var(--text); font-weight: 700; }
 
@@ -241,14 +237,14 @@ input[type="date"], select, button, input[type="search"] {
 }
 button {
   cursor: pointer;
-  background: linear-gradient(135deg, #e879f9 0%, #c084fc 55%, #f472b8 100%);
+  background: #c084fc;
   border: none;
   color: #fff;
   font-weight: 700;
   transition: transform 0.08s ease, opacity 0.15s ease, box-shadow 0.15s ease;
   width: auto;
   padding-inline: 1.2rem;
-  box-shadow: 0 4px 16px rgba(192, 38, 211, 0.25);
+  box-shadow: none;
 }
 button.secondary {
   background: rgba(255, 255, 255, 0.92);
@@ -265,7 +261,8 @@ button:disabled { opacity: 0.45; cursor: default; transform: none; }
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.85rem;
-  margin: 1.5rem 0;
+  margin: 1.5rem auto;
+  max-width: calc(3 * 200px + 2 * 0.85rem);
 }
 .kpi {
   flex: 0 1 auto;

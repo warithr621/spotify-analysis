@@ -6,7 +6,7 @@
   <title>Spotify Listening — Audio Analytics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Nunito+Sans:ital,opsz,wght@0,6..12,400..700;1,6..12,400..600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Nunito+Sans:ital,opsz,wght@0,6..12,400..700;1,6..12,400..600&family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/dashboard.css" />
 </head>
@@ -15,7 +15,7 @@
   <div class="wrap">
     <nav class="toc" aria-label="Jump to sections">
       <div class="toc-inner">
-        <span class="toc-label">Jump</span>
+        <span class="toc-label">Jump to...</span>
         <a href="#snapshot">Snapshot</a>
         <a href="#trends">Trends</a>
         <a href="#rhythm">Rhythm</a>
@@ -27,11 +27,8 @@
     <header class="hero">
       <div class="hero-top">
         <div>
-          <h1>Your audio listening, decoded</h1>
+          <h1>your music history, decoded</h1>
           <p class="hero-data-note" id="hero-data-note" aria-live="polite" hidden></p>
-          <p class="hero-sub">
-            All data presented in Central Time (CST/CDT, America/Chicago).
-          </p>
           <div class="meta-pills" id="pills-host"></div>
           <div class="refresh-bar">
             <button type="button" id="btn-refresh">Refresh Spotify data</button>
