@@ -405,6 +405,7 @@ def api_item_to_row(item: dict[str, Any]) -> dict[str, Any] | None:
         "offline": False,
         "offline_timestamp": None,
         "incognito_mode": False,
+        "ms_played_resolved": False,
     }
 
 
@@ -463,6 +464,72 @@ def append_new_rows(rows: list[dict[str, Any]]) -> int:
     return added
 
 
+def resolve_live_ms_played() -> None:
+    """
+    Recompute ms_played for unresolved rows in live.json using played_at deltas.
+
+    For each unresolved row (ms_played_resolved missing or False), sets:
+        ms_played = max(0, min(played_at - predecessor_played_at, duration_ms))
+    The oldest row with no predecessor keeps ms_played = duration_ms.
+
+    Resolved rows (ms_played_resolved == True) are used as predecessors but not
+    modified. Writes the full sorted list back atomically only if changes were made.
+    """
+    live_path = BASE / LIVE_FILENAME
+    if not live_path.is_file():
+        return
+
+    rows = _load_json_file(live_path)
+    if not rows:
+        return
+
+    if all(r.get("ms_played_resolved") for r in rows):
+        return
+
+    rows.sort(key=lambda r: parse_ts(str(r.get("ts") or "")) or datetime.min.replace(tzinfo=timezone.utc))
+
+    changed = False
+    predecessor_ts: datetime | None = None
+
+    for row in rows:
+        ts = parse_ts(str(row.get("ts") or ""))
+        if row.get("ms_played_resolved"):
+            predecessor_ts = ts
+            continue
+
+        duration_ms = int(row.get("ms_played") or 0)
+        if predecessor_ts is not None and ts is not None:
+            diff_ms = int((ts - predecessor_ts).total_seconds() * 1000)
+            row["ms_played"] = max(0, min(diff_ms, duration_ms))
+        row["ms_played_resolved"] = True
+        predecessor_ts = ts
+        changed = True
+
+    if not changed:
+        return
+
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=str(BASE),
+        prefix=".live_audio.",
+        suffix=".tmp",
+        delete=False,
+    )
+    try:
+        json.dump(rows, tmp, ensure_ascii=False, indent=2)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        tmp.close()
+        os.replace(tmp.name, live_path)
+    except Exception:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        raise
+
+
 def sync_incremental(latest_saved: datetime | None) -> tuple[int, list[dict[str, Any]]]:
     """
     Fetch plays after latest_saved (exclusive per Spotify `after` ms semantics),
@@ -479,6 +546,7 @@ def sync_incremental(latest_saved: datetime | None) -> tuple[int, list[dict[str,
         if row:
             mapped.append(row)
     added = append_new_rows(mapped)
+    resolve_live_ms_played()
     return added, mapped
 
 
