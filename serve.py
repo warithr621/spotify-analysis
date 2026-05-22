@@ -126,6 +126,16 @@ def index():
     return send_file(OUT_HTML, mimetype="text/html; charset=utf-8")
 
 
+@app.route("/dashboard.js")
+def serve_dashboard_js():
+    return send_file(BASE / "dashboard.js", mimetype="application/javascript")
+
+
+@app.route("/dashboard.css")
+def serve_dashboard_css():
+    return send_file(BASE / "dashboard.css", mimetype="text/css")
+
+
 @app.route("/callback")
 def oauth_callback():
     err = request.args.get("error")
