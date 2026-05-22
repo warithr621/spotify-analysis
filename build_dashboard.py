@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 DISPLAY_TZ = ZoneInfo("America/Chicago")
 
 BASE = Path(__file__).resolve().parent
+HISTORY_DIR = BASE / "music-history"
 TEMPLATE = BASE / "template.html"
 OUT_HTML = BASE / "dashboard.html"
 AUDIO_GLOB = "Streaming_History_Audio_*.json"
@@ -41,7 +42,7 @@ def parse_ts(s: str) -> datetime | None:
 
 def load_events() -> list[dict]:
     rows: list[dict] = []
-    files = sorted(glob.glob(str(BASE / AUDIO_GLOB)))
+    files = sorted(glob.glob(str(HISTORY_DIR / AUDIO_GLOB)))
     for fp in files:
         try:
             with open(fp, "r", encoding="utf-8") as f:

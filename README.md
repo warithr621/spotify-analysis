@@ -52,7 +52,7 @@ From the dashboard, click **Refresh Spotify data** to authorize Spotify and fetc
 
 Spotify's API only lets you fetch the 50 most recently played songs. If you want your all-time statistics, first request your Extended Streaming History from [this link](https://www.spotify.com/us/account/privacy/). After a few days (it should be way less than the advertised 30 days), you should get emailed a ZIP file with several JSON files, all named something like `Streaming_History_Audio_2026.json`.
 
-If you put all these JSONs in the same directory and rerun the serve, the app will automatically read all these files and include them in the statistics.
+Put all these JSONs in the `music-history/` subfolder of this directory and rerun the server — the app will automatically read them and include them in the statistics.
 
 # Background Serving and Refreshing
 

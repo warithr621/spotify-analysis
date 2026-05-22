@@ -24,6 +24,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 BASE = Path(__file__).resolve().parent
+HISTORY_DIR = BASE / "music-history"
 AUDIO_GLOB = "Streaming_History_Audio_*.json"
 LIVE_FILENAME = "Streaming_History_Audio_live.json"
 TOKENS_PATH = BASE / "spotify_tokens.json"
@@ -87,7 +88,7 @@ def _load_json_file(path: Path) -> list[dict[str, Any]] | None:
 def compute_latest_event_utc() -> datetime | None:
     """Newest `ts` among all Streaming_History_Audio_*.json rows."""
     latest: datetime | None = None
-    for fp in sorted(glob.glob(str(BASE / AUDIO_GLOB))):
+    for fp in sorted(glob.glob(str(HISTORY_DIR / AUDIO_GLOB))):
         data = _load_json_file(Path(fp))
         if not data:
             continue
@@ -101,7 +102,7 @@ def compute_latest_event_utc() -> datetime | None:
 def collect_existing_row_keys() -> set[tuple[str, str]]:
     """Keys (ts, spotify_track_uri) for deduplication."""
     keys: set[tuple[str, str]] = set()
-    for fp in sorted(glob.glob(str(BASE / AUDIO_GLOB))):
+    for fp in sorted(glob.glob(str(HISTORY_DIR / AUDIO_GLOB))):
         data = _load_json_file(Path(fp))
         if not data:
             continue
@@ -419,7 +420,7 @@ def append_new_rows(rows: list[dict[str, Any]]) -> int:
         return 0
 
     existing = collect_existing_row_keys()
-    live_path = BASE / LIVE_FILENAME
+    live_path = HISTORY_DIR / LIVE_FILENAME
     current: list[dict[str, Any]] = []
     if live_path.is_file():
         loaded = _load_json_file(live_path)
@@ -443,7 +444,7 @@ def append_new_rows(rows: list[dict[str, Any]]) -> int:
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
-        dir=str(BASE),
+        dir=str(HISTORY_DIR),
         prefix=".live_audio.",
         suffix=".tmp",
         delete=False,
@@ -475,7 +476,7 @@ def resolve_live_ms_played() -> None:
     Resolved rows (ms_played_resolved == True) are used as predecessors but not
     modified. Writes the full sorted list back atomically only if changes were made.
     """
-    live_path = BASE / LIVE_FILENAME
+    live_path = HISTORY_DIR / LIVE_FILENAME
     if not live_path.is_file():
         return
 
@@ -511,7 +512,7 @@ def resolve_live_ms_played() -> None:
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
-        dir=str(BASE),
+        dir=str(HISTORY_DIR),
         prefix=".live_audio.",
         suffix=".tmp",
         delete=False,

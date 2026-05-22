@@ -84,7 +84,7 @@ def release_file_lock() -> None:
 def newest_source_mtime() -> float:
     mtimes: list[float] = []
     for pattern in ("Streaming_History_Audio_*.json",):
-        for fp in glob.glob(str(BASE / pattern)):
+        for fp in glob.glob(str(BASE / "music-history" / pattern)):
             try:
                 mtimes.append(Path(fp).stat().st_mtime)
             except OSError:
@@ -122,7 +122,7 @@ app = Flask(__name__)
 def index():
     maybe_rebuild_dashboard()
     if not OUT_HTML.is_file():
-        return Response("Run build_dashboard.py first or add Streaming_History_Audio_*.json", status=404)
+        return Response("Run build_dashboard.py first or add Streaming_History_Audio_*.json files to music-history/", status=404)
     return send_file(OUT_HTML, mimetype="text/html; charset=utf-8")
 
 

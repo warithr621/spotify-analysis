@@ -46,4 +46,4 @@ spotify_tokens.json
 .spotify_tokens.*.tmp
 .live_audio.*.tmp
 dashboard.html
-Streaming_History_Audio_*.json
+music-history/Streaming_History_Audio_*.json
