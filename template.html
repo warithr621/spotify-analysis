@@ -185,6 +185,7 @@
 
     .refresh-bar {
       display: flex;
+      flex-wrap: wrap;
       justify-content: center;
       align-items: center;
       margin-top: 1.15rem;
@@ -570,6 +571,23 @@
       font-size: 0.78rem;
       text-align: center;
     }
+    #refresh-status { margin-top: 0.75rem; display: none; flex-basis: 100%; text-align: center; }
+    #refresh-bar-wrap {
+      height: 6px; border-radius: 999px;
+      background: var(--border-soft); overflow: hidden; margin-bottom: 0.5rem;
+    }
+    #refresh-bar {
+      height: 100%; width: 40%; border-radius: 999px;
+      background: linear-gradient(90deg, #e879f9, #c084fc, #f472b8);
+      animation: refresh-slide 1.4s ease-in-out infinite;
+    }
+    @keyframes refresh-slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+    #refresh-msg { font-size: 0.85rem; color: var(--text-soft); }
+    #refresh-msg.ok  { color: #16a34a; font-weight: 600; }
+    #refresh-msg.err { color: var(--danger); }
   </style>
 </head>
 <body>
@@ -597,6 +615,10 @@
           <div class="meta-pills" id="pills-host"></div>
           <div class="refresh-bar">
             <button type="button" id="btn-refresh">Refresh Spotify data</button>
+            <div id="refresh-status">
+              <div id="refresh-bar-wrap"><div id="refresh-bar"></div></div>
+              <div id="refresh-msg"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1390,36 +1412,39 @@
     }
 
     function wireRefreshControls() {
-      const btn = document.getElementById("btn-refresh");
+      const btn     = document.getElementById("btn-refresh");
+      const status  = document.getElementById("refresh-status");
+      const barWrap = document.getElementById("refresh-bar-wrap");
+      const msg     = document.getElementById("refresh-msg");
       if (!btn) return;
       btn.addEventListener("click", async () => {
         btn.disabled = true;
+        status.style.display = "block";
+        barWrap.style.display = "block";
+        msg.className = "";
+        msg.textContent = "Contacting Spotify…";
         try {
           const r = await fetch("/api/refresh", { method: "POST" });
           let data = {};
-          try {
-            data = await r.json();
-          } catch {
-            /* ignore */
-          }
-          const msg =
-            typeof data.message === "string"
-              ? data.message
-              : r.status === 429
-                ? "You can refresh again after the cooldown."
-                : r.statusText || "Unknown error";
-
+          try { data = await r.json(); } catch {}
+          barWrap.style.display = "none";
           if (r.status === 200 && data.ok === true) {
-            window.location.reload();
-            return;
+            msg.className = "ok";
+            msg.textContent = "✓ " + data.message;
+            setTimeout(() => window.location.reload(), 1800);
+          } else {
+            btn.disabled = false;
+            msg.className = "err";
+            msg.textContent =
+              typeof data.message === "string" ? data.message
+              : r.status === 429 ? "You can refresh again after the cooldown."
+              : r.statusText || "Unknown error";
           }
-          alert(msg);
-        } catch (e) {
-          alert(
-            "Could not reach the local server. Run `python serve.py` and open http://127.0.0.1:8765/"
-          );
-        } finally {
+        } catch {
           btn.disabled = false;
+          barWrap.style.display = "none";
+          msg.className = "err";
+          msg.textContent = "Could not reach the local server.";
         }
       });
     }
