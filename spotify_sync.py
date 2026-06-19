@@ -274,8 +274,20 @@ def ensure_access_token() -> str:
                 }
                 save_tokens(payload)
                 return new_access
+            except requests.HTTPError as e:
+                err: dict[str, Any] = {}
+                if e.response is not None:
+                    try:
+                        err = e.response.json()
+                    except Exception:
+                        pass
+                if err.get("error") == "invalid_grant":
+                    logger.info("Refresh token expired (invalid_grant); discarding and re-authorizing")
+                    TOKENS_PATH.unlink(missing_ok=True)
+                else:
+                    logger.warning("Token refresh HTTP error, re-authorizing: %s", e)
             except requests.RequestException as e:
-                logger.warning("Token refresh failed, re-authorizing: %s", e)
+                logger.warning("Token refresh failed (network), re-authorizing: %s", e)
 
     # PKCE authorization code flow
     q = _oauth_code_queue
