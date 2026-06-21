@@ -32,9 +32,9 @@ function dayIsoFromSeriesRow(row) {
   return typeof row.i === "number" ? offToDayStr(row.i) : row.d;
 }
 
-Chart.defaults.font.family = "'Nunito Sans', system-ui, sans-serif";
-Chart.defaults.color = "#776090";
-Chart.defaults.borderColor = "rgba(167, 139, 250, 0.35)";
+Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+Chart.defaults.color = "#6b4e8a";
+Chart.defaults.borderColor = "rgba(42, 10, 74, 0.12)";
 
 function chartLayoutOpts(extra) {
   return Object.assign(
@@ -174,11 +174,6 @@ function buildYearSeriesFromDays(days) {
     .map((y) => ({ y, ms: map[y] }));
 }
 
-function scaleHeatmap(fraction) {
-  const base = DATA.weekday_hour_ms;
-  const scaled = base.map(row => row.map(v => Math.round(v * fraction)));
-  return scaled;
-}
 
 function renderKpis({ fromDay, toDay }) {
   const days = daysSlice(fromDay, toDay);
@@ -219,9 +214,6 @@ function renderKpis({ fromDay, toDay }) {
 function renderCharts() {
   const { fromDay, toDay } = state;
   const days = daysSlice(fromDay, toDay);
-  const globMsAll = DATA.totals.ms;
-  const filteredMs = totalsFromDays(days).ms;
-  const fracMs = globMsAll > 0 ? filteredMs / globMsAll : 1;
 
   const mSeries = buildMonthSeriesFromDays(days);
   const ySeries = buildYearSeriesFromDays(days);
@@ -235,8 +227,8 @@ function renderCharts() {
         {
           label: "Minutes",
           data: mSeries.map((x) => +(x.ms / 60000).toFixed(2)),
-          borderColor: "#e879ca",
-          backgroundColor: "rgba(232,121,202,0.14)",
+          borderColor: "#c026d3",
+          backgroundColor: "rgba(192,38,211,0.16)",
           fill: true,
           tension: 0.35,
         },
@@ -244,7 +236,7 @@ function renderCharts() {
     },
     options: chartLayoutOpts({
       scales: {
-        x: { ticks: { maxRotation: 0, autoSkip: true } },
+        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
         y: { ticks: { callback: (v) => `${v}` } },
       },
       plugins: {
@@ -269,7 +261,7 @@ function renderCharts() {
           label: "Minutes",
           data: ySeries.map((x) => +(x.ms / 60000).toFixed(2)),
           backgroundColor: ySeries.map(
-            (_, i) => `hsla(${286 + ((i * 41) % 80)},72%,62%,${0.42 + ((i % 4) * 0.06)})`
+            (_, i) => (i % 2 ? "rgba(219,39,119,0.55)" : "rgba(192,38,211,0.55)")
           ),
           borderRadius: 8,
         },
@@ -292,37 +284,9 @@ function renderCharts() {
     }),
   });
 
-  paintHeatmap(scaleHeatmap(fracMs));
-
   rebuildTables();
   hydrateArtistExplorer();
   renderArtistChart();
-}
-
-function paintHeatmap(matrix) {
-  const host = document.getElementById("heatmap-host");
-  if (!host) return;
-  const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-  let mx = 0;
-  matrix.forEach(r=> r.forEach(v=> { if (v>mx) mx=v; }));
-
-  const frag = [];
-  frag.push(`<div class="hm-corner"></div>`);
-  for (let h=0;h<24;h++) frag.push(`<div class="hm-h">${h}</div>`);
-  for (let d=0; d<7; d++) {
-    frag.push(`<div class="hm-d">${days[d]}</div>`);
-    for (let h=0;h<24;h++) {
-      const v = matrix[d][h];
-      const intensity = mx ? Math.pow(v / mx, 0.62) : 0;
-      const bg =
-        intensity < 0.02
-          ? "#faf5ff"
-          : `rgba(147,51,234,${0.12 + intensity * 0.48})`;
-      const title = `${days[d]} ${h}:00 - ${fmtMin(v/60000)}`;
-      frag.push(`<div class="hm-cell" style="background:${bg}" title="${title}"></div>`);
-    }
-  }
-  host.innerHTML = frag.join('');
 }
 
 let tblSort = { artists:{k:'minutes',rev:false}, albums:{k:'minutes',rev:false}, tracks:{k:'minutes',rev:false}};
@@ -475,8 +439,8 @@ function renderArtistChart(){
           label: "Listening time by month",
           data: dataMin,
           borderRadius: 8,
-          backgroundColor: "rgba(232,121,202,0.55)",
-          borderColor: "rgba(192,132,252,0.7)",
+          backgroundColor: "rgba(219,39,119,0.5)",
+          borderColor: "rgba(219,39,119,0.85)",
           borderWidth: 1,
         },
       ],
@@ -484,7 +448,7 @@ function renderArtistChart(){
     options: chartLayoutOpts({
       scales: {
         x: {
-          ticks: { maxRotation: 0 },
+          ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
           grid: { color: "rgba(192,132,252,0.12)" },
         },
         y: {
@@ -622,6 +586,7 @@ function renderRecentPlays() {
     return;
   }
   body.innerHTML = rows
+    .slice(0, 10)
     .map((r) => {
       const t = escHtml(r.track || "—");
       const a = escHtml(r.artist || "—");
