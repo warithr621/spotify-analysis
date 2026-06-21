@@ -251,12 +251,21 @@ def api_authorize():
             logger.exception("Re-authorization failed")
             return jsonify(ok=False, message=f"Re-authorization failed: {e}"), 500
         tokens = spotify_sync.load_tokens() or {}
-        if not tokens.get("refresh_token"):
+        refresh_token = tokens.get("refresh_token")
+        if not refresh_token:
             return jsonify(ok=False, message="Authorized, but no refresh token was returned."), 500
+
+        pushed, push_msg = cloud_pull.push_live_token(refresh_token)
+        if pushed:
+            return jsonify(
+                ok=True,
+                message="Re-authorized and pushed the new token to the data repo. "
+                "The next cloud run will use it.",
+            ), 200
         return jsonify(
             ok=True,
-            message="Re-authorized. Refresh token saved to spotify_tokens.json — "
-            "commit it to the data repo as live_token.json.",
+            message=f"Re-authorized (token saved locally), but auto-push failed: {push_msg} "
+            "Commit live_token.json to the data repo manually.",
         ), 200
     finally:
         refresh_thread_lock.release()

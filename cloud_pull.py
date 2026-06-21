@@ -8,10 +8,12 @@ dashboard keeps working off whatever live buffer it already has.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -21,6 +23,7 @@ logger = logging.getLogger(__name__)
 BASE = Path(__file__).resolve().parent
 HISTORY_DIR = BASE / "music-history"
 LIVE_FILENAME = "Streaming_History_Audio_live.json"
+TOKEN_FILENAME = "live_token.json"
 CONTENTS_API = "https://api.github.com/repos/{repo}/contents/{path}"
 
 
@@ -83,6 +86,58 @@ def pull_live() -> bool:
 
     logger.info("Pulled cloud live buffer (%d rows) into %s", len(data), live_path)
     return True
+
+
+def push_live_token(refresh_token: str) -> tuple[bool, str]:
+    """Write live_token.json to the data repo via the GitHub contents API.
+
+    Used by the local re-authorize flow so a fresh refresh token lands in the data
+    repo without manual git steps. Requires DATA_REPO + a DATA_REPO_TOKEN with
+    Contents: Read and write. Returns (ok, message).
+    """
+    repo = (os.environ.get("DATA_REPO") or "").strip()
+    token = (os.environ.get("DATA_REPO_TOKEN") or "").strip()
+    if not repo or not token:
+        return False, "DATA_REPO / DATA_REPO_TOKEN not set."
+
+    url = CONTENTS_API.format(repo=repo, path=TOKEN_FILENAME)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    # The contents API needs the current blob sha to update an existing file.
+    sha = None
+    try:
+        g = requests.get(url, headers=headers, timeout=60)
+        if g.status_code == 200:
+            sha = g.json().get("sha")
+        elif g.status_code != 404:
+            g.raise_for_status()
+    except requests.RequestException as e:
+        return False, f"Could not read existing token file: {e}"
+
+    content = json.dumps({"refresh_token": refresh_token}, indent=2).encode("utf-8")
+    payload = {
+        "message": f"re-auth: update refresh token {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        "content": base64.b64encode(content).decode("ascii"),
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        p = requests.put(url, headers=headers, json=payload, timeout=60)
+        p.raise_for_status()
+    except requests.RequestException as e:
+        detail = ""
+        if isinstance(e, requests.HTTPError) and e.response is not None:
+            if e.response.status_code in (403, 404):
+                detail = " (does DATA_REPO_TOKEN have Contents: Read and write?)"
+        return False, f"Push failed: {e}{detail}"
+
+    logger.info("Pushed new refresh token to %s/%s", repo, TOKEN_FILENAME)
+    return True, "Pushed the new token to the data repo."
 
 
 if __name__ == "__main__":

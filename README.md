@@ -67,7 +67,7 @@ This needs a **separate private repo** to hold your live data (so personal liste
    - `live_token.json` — `{"refresh_token": "<the refresh_token from spotify_tokens.json>"}`.
 4. Create two fine-grained Personal Access Tokens:
    - **Cloud** (`DATA_REPO_PAT`): Contents **Read and write** on the data repo only.
-   - **Local** (`DATA_REPO_TOKEN`): Contents **Read** on the data repo only.
+   - **Local** (`DATA_REPO_TOKEN`): Contents **Read and write** on the data repo only (read pulls the live buffer; write lets the Re-authorize button push a refreshed token back automatically).
    Give both an expiry and set a calendar reminder.
 5. On **this** repo (Settings → Secrets and variables → Actions):
    - Secrets: `SPOTIFY_CLIENT_ID`, `DATA_REPO_PAT`.
@@ -84,7 +84,7 @@ This needs a **separate private repo** to hold your live data (so personal liste
 
 Once `DATA_REPO` and `DATA_REPO_TOKEN` are set in `.env`, the dashboard's **Refresh Spotify data** button pulls the cloud buffer instead of calling Spotify directly. With them unset, it behaves exactly as before (direct local Spotify sync), so nothing breaks before you finish setup.
 
-**Every ~6 months:** Spotify refresh tokens expire 6 months after authorization (refreshing does not reset the clock). Repeat step 2, then commit the new `live_token.json` to the data repo with your own git credentials (the local PAT is read-only), and update `SPOTIFY_AUTH_DATE`.
+**Every ~6 months:** Spotify refresh tokens expire 6 months after authorization (refreshing does not reset the clock). Just click **Re-authorize Spotify (cloud)** and approve in the browser — the new token is pushed to the data repo automatically (via `DATA_REPO_TOKEN`'s write access), and the next cloud run picks it up. Optionally update the `SPOTIFY_AUTH_DATE` variable so the workflow's expiry warning resets.
 
 > **Note on the 60-day rule:** GitHub disables scheduled workflows after 60 days with no repo activity. `keepalive.yml` ships a small heartbeat commit every ~20 days to prevent that.
 
