@@ -546,12 +546,11 @@ function bootstrap(){
     noteEl.hidden = parts.length === 0;
   }
 
-  document.getElementById('pills-host').innerHTML = `
-    <span class="pill"><strong>${fmtMin(DATA.totals.minutes)}</strong> cumulative minutes exported</span>
-    <span class="pill"><strong>${fmtNum(DATA.totals.streams)}</strong> tracked plays</span>
-    <span class="pill"><strong>${fmtNum(DATA.totals.unique_artists)}</strong> unique artists listened to</span>
-    <span class="pill"><strong>${fmtNum(DATA.totals.unique_tracks)}</strong> unique tracks heard</span>
-  `;
+  document.getElementById('pills-host').innerHTML =
+    `<strong>${fmtNum(DATA.totals.streams)}</strong> plays · ` +
+    `<strong>${fmtMin(DATA.totals.minutes)}</strong> listened · ` +
+    `<strong>${fmtNum(DATA.totals.unique_artists)}</strong> artists · ` +
+    `<strong>${fmtNum(DATA.totals.unique_tracks)}</strong> tracks`;
 
   state.fromDay = earliest;
   state.toDay = latest;

@@ -119,22 +119,28 @@ def write_last_status(payload: dict) -> None:
 app = Flask(__name__)
 
 
+def _no_cache(resp: Response) -> Response:
+    """Force the browser to revalidate so dashboard edits always show up."""
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
 @app.route("/")
 def index():
     maybe_rebuild_dashboard()
     if not OUT_HTML.is_file():
         return Response("Run build_dashboard.py first or add Streaming_History_Audio_*.json files to music-history/", status=404)
-    return send_file(OUT_HTML, mimetype="text/html; charset=utf-8")
+    return _no_cache(send_file(OUT_HTML, mimetype="text/html; charset=utf-8"))
 
 
 @app.route("/dashboard.js")
 def serve_dashboard_js():
-    return send_file(BASE / "dashboard.js", mimetype="application/javascript")
+    return _no_cache(send_file(BASE / "dashboard.js", mimetype="application/javascript"))
 
 
 @app.route("/dashboard.css")
 def serve_dashboard_css():
-    return send_file(BASE / "dashboard.css", mimetype="text/css")
+    return _no_cache(send_file(BASE / "dashboard.css", mimetype="text/css"))
 
 
 @app.route("/callback")
