@@ -1,0 +1,32 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows after 60 days with no repo activity on the
+# default branch. This commits a tiny heartbeat well inside that window so the
+# hourly Spotify sync is never silently disabled. Shipped from day one — detecting
+# dormancy after it happens is too late.
+
+on:
+  schedule:
+    - cron: "17 6 */20 * *"   # every ~20 days
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Touch heartbeat
+        run: |
+          git config user.name "keepalive-bot"
+          git config user.email "keepalive-bot@users.noreply.github.com"
+          date -u +%Y-%m-%dT%H:%M:%SZ > .keepalive
+          git add .keepalive
+          git commit -m "keepalive: $(date -u +%Y-%m-%d)"
+          git push

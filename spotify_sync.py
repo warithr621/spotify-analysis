@@ -24,7 +24,9 @@ import requests
 logger = logging.getLogger(__name__)
 
 BASE = Path(__file__).resolve().parent
-HISTORY_DIR = BASE / "music-history"
+# Overridable so the headless cloud job can point at the data-repo checkout (./_data).
+# Default unchanged for the local app.
+HISTORY_DIR = Path(os.environ["SPOTIFY_HISTORY_DIR"]) if os.environ.get("SPOTIFY_HISTORY_DIR") else BASE / "music-history"
 AUDIO_GLOB = "Streaming_History_Audio_*.json"
 LIVE_FILENAME = "Streaming_History_Audio_live.json"
 TOKENS_PATH = BASE / "spotify_tokens.json"
@@ -543,13 +545,17 @@ def resolve_live_ms_played() -> None:
         raise
 
 
-def sync_incremental(latest_saved: datetime | None) -> tuple[int, list[dict[str, Any]]]:
+def sync_incremental(
+    latest_saved: datetime | None, access_token: str | None = None
+) -> tuple[int, list[dict[str, Any]]]:
     """
     Fetch plays after latest_saved (exclusive per Spotify `after` ms semantics),
     map to rows, dedupe and append. If latest_saved is None, uses epoch.
+    If access_token is given, it is used directly (the cloud job injects its own
+    token); otherwise the local PKCE/refresh flow runs via ensure_access_token().
     Returns (added_count, mapped_rows_before_dedup).
     """
-    token = ensure_access_token()
+    token = access_token or ensure_access_token()
     after_dt = latest_saved or datetime(1970, 1, 1, tzinfo=timezone.utc)
     after_ms = int(after_dt.timestamp() * 1000)
     items = fetch_recently_played_after(token, after_ms)

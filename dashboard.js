@@ -638,13 +638,14 @@ function wireRefreshControls() {
   const status  = document.getElementById("refresh-status");
   const barWrap = document.getElementById("refresh-bar-wrap");
   const msg     = document.getElementById("refresh-msg");
+  const authBtn = document.getElementById("btn-authorize");
   if (!btn) return;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     status.style.display = "block";
     barWrap.style.display = "block";
     msg.className = "";
-    msg.textContent = "Contacting Spotify…";
+    msg.textContent = "Refreshing…";
     try {
       const r = await fetch("/api/refresh", { method: "POST" });
       let data = {};
@@ -669,6 +670,35 @@ function wireRefreshControls() {
       msg.textContent = "Could not reach the local server.";
     }
   });
+
+  if (authBtn) {
+    authBtn.addEventListener("click", async () => {
+      authBtn.disabled = true;
+      status.style.display = "block";
+      barWrap.style.display = "none";
+      msg.className = "";
+      msg.textContent = "Opening Spotify authorization in your browser…";
+      try {
+        const r = await fetch("/api/authorize", { method: "POST" });
+        let data = {};
+        try { data = await r.json(); } catch {}
+        authBtn.disabled = false;
+        if (r.status === 200 && data.ok === true) {
+          msg.className = "ok";
+          msg.textContent = "✓ " + data.message;
+        } else {
+          msg.className = "err";
+          msg.textContent =
+            typeof data.message === "string" ? data.message
+            : r.statusText || "Unknown error";
+        }
+      } catch {
+        authBtn.disabled = false;
+        msg.className = "err";
+        msg.textContent = "Could not reach the local server.";
+      }
+    });
+  }
 }
 
 function wireInteractions(){

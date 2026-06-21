@@ -37,6 +37,7 @@ env/
 ENV/
 .env
 .env.*
+!.env.example
 
 # Spotify local config, auth state, and generated outputs
 spotify_config.json

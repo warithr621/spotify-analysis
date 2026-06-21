@@ -15,6 +15,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_file
 
 import build_dashboard
+import cloud_pull
 import spotify_sync
 
 spotify_sync.prime_local_env()
@@ -180,15 +181,31 @@ def api_refresh():
         return jsonify(ok=False, message="Refresh already in progress."), 409
 
     try:
-        latest = spotify_sync.compute_latest_event_utc()
+        # When the cloud scraper is configured, refresh = pull the merged cloud
+        # buffer. Otherwise fall back to the local Spotify sync so the dashboard
+        # behaves exactly as before cloud setup. pull_live() is best-effort and
+        # never raises.
+        cloud_configured = bool(
+            (os.environ.get("DATA_REPO") or "").strip()
+            and (os.environ.get("DATA_REPO_TOKEN") or "").strip()
+        )
+        added = 0
 
-        try:
-            added, _ = spotify_sync.sync_incremental(latest)
-        except Exception as e:
-            logger.exception("Spotify sync failed")
-            payload = {"ok": False, "message": f"Sync failed: {e}"}
-            write_last_status(payload)
-            return jsonify(payload), 500
+        if cloud_configured:
+            pulled = cloud_pull.pull_live()
+            if not pulled:
+                payload = {"ok": False, "message": "Could not pull cloud data. See server logs."}
+                write_last_status(payload)
+                return jsonify(payload), 502
+        else:
+            latest = spotify_sync.compute_latest_event_utc()
+            try:
+                added, _ = spotify_sync.sync_incremental(latest)
+            except Exception as e:
+                logger.exception("Spotify sync failed")
+                payload = {"ok": False, "message": f"Sync failed: {e}"}
+                write_last_status(payload)
+                return jsonify(payload), 500
 
         try:
             build_dashboard.main()
@@ -200,7 +217,10 @@ def api_refresh():
 
         new_latest = spotify_sync.compute_latest_event_utc()
         rebuilt_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        msg = f"Added {added} new play(s)." if added else "No new plays from Spotify (within API window)."
+        if cloud_configured:
+            msg = "Pulled latest cloud data."
+        else:
+            msg = f"Added {added} new play(s)." if added else "No new plays from Spotify (within API window)."
         payload = {
             "ok": True,
             "message": msg,
@@ -212,6 +232,33 @@ def api_refresh():
         return jsonify(payload), 200
     finally:
         release_file_lock()
+        refresh_thread_lock.release()
+
+
+@app.route("/api/authorize", methods=["POST"])
+def api_authorize():
+    """Force a fresh Spotify PKCE login (opens the browser) and store the new
+    refresh token in spotify_tokens.json, for seeding/rotating the cloud token."""
+    if not refresh_thread_lock.acquire(blocking=False):
+        return jsonify(ok=False, message="Another operation is in progress."), 409
+    try:
+        # Discard any cached token so ensure_access_token runs the full browser flow
+        # and yields a brand-new refresh token.
+        spotify_sync.TOKENS_PATH.unlink(missing_ok=True)
+        try:
+            spotify_sync.ensure_access_token()
+        except Exception as e:
+            logger.exception("Re-authorization failed")
+            return jsonify(ok=False, message=f"Re-authorization failed: {e}"), 500
+        tokens = spotify_sync.load_tokens() or {}
+        if not tokens.get("refresh_token"):
+            return jsonify(ok=False, message="Authorized, but no refresh token was returned."), 500
+        return jsonify(
+            ok=True,
+            message="Re-authorized. Refresh token saved to spotify_tokens.json — "
+            "commit it to the data repo as live_token.json.",
+        ), 200
+    finally:
         refresh_thread_lock.release()
 
 

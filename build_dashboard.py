@@ -11,6 +11,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import spotify_sync
+
 # Global display timezone. All user-facing day/month/year buckets, the heatmap,
 # and the date picker bounds project events into this zone (handles CST/CDT) so
 # the dashboard reflects local calendar days instead of UTC days.
@@ -40,6 +42,49 @@ def parse_ts(s: str) -> datetime | None:
         return None
 
 
+def _row_is_export(r: dict) -> bool:
+    """Export rows carry true ms_played + full metadata and lack the live-only
+    `ms_played_resolved` key; live/API rows always have it."""
+    return "ms_played_resolved" not in r
+
+
+def dedup_rows(rows: list[dict]) -> list[dict]:
+    """Collapse duplicate plays sharing a (normalized ts, spotify_track_uri) key.
+
+    On collision the export copy wins over a live/API copy (true ms_played + full
+    metadata); among same-kind rows the larger ms_played wins. Rows lacking a
+    (ts, uri) key (podcasts / missing URI) are always kept as-is.
+    """
+    out: list[dict] = []
+    index: dict[tuple[str, str], int] = {}
+    collapsed = 0
+    for r in rows:
+        ts_raw = str(r.get("ts") or "").strip()
+        uri = str(r.get("spotify_track_uri") or "").strip()
+        if not ts_raw or not uri:
+            out.append(r)
+            continue
+        key = (spotify_sync.normalize_ts_key(ts_raw), uri)
+        pos = index.get(key)
+        if pos is None:
+            index[key] = len(out)
+            out.append(r)
+            continue
+        collapsed += 1
+        existing = out[pos]
+        cand_export, exist_export = _row_is_export(r), _row_is_export(existing)
+        if cand_export != exist_export:
+            if cand_export:
+                out[pos] = r
+        elif int(r.get("ms_played") or 0) > int(existing.get("ms_played") or 0):
+            out[pos] = r
+    logger.info(
+        "dedup_rows: %d -> %d rows (%d duplicate (ts,uri) collapsed)",
+        len(rows), len(out), collapsed,
+    )
+    return out
+
+
 def load_events() -> list[dict]:
     rows: list[dict] = []
     files = sorted(glob.glob(str(HISTORY_DIR / AUDIO_GLOB)))
@@ -54,7 +99,7 @@ def load_events() -> list[dict]:
             logger.warning("Skipping %s: expected list at top level, got %s", fp, type(data).__name__)
             continue
         rows.extend(data)
-    return rows
+    return dedup_rows(rows)
 
 
 def latest_timestamp(events: list[dict]) -> datetime | None:
