@@ -179,6 +179,21 @@ h1 {
 .refresh-bar button {
   min-width: 11rem;
 }
+/* Float the re-authorize control in the top-right corner, above the sticky nav.
+   It's a secondary action, so keep it compact and quieter than the primary
+   Refresh button while staying the same purple. */
+#btn-authorize {
+  position: fixed;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 50;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+}
 
 .scroll.scroll--recent {
   max-height: 320px;
