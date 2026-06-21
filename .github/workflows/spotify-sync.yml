@@ -1,3 +1,4 @@
+# Hourly cloud scrape of recently-played into the private data repo.
 name: Spotify hourly sync
 
 on:

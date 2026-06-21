@@ -1,3 +1,4 @@
+# Heartbeat commit so GitHub never disables the scheduled sync after 60 days idle.
 name: Keepalive
 
 # GitHub disables scheduled workflows after 60 days with no repo activity on the
