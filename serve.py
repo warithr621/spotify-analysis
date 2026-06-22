@@ -187,31 +187,33 @@ def api_refresh():
         return jsonify(ok=False, message="Refresh already in progress."), 409
 
     try:
-        # When the cloud scraper is configured, refresh = pull the merged cloud
-        # buffer. Otherwise fall back to the local Spotify sync so the dashboard
-        # behaves exactly as before cloud setup. pull_live() is best-effort and
-        # never raises.
         cloud_configured = bool(
             (os.environ.get("DATA_REPO") or "").strip()
             and (os.environ.get("DATA_REPO_TOKEN") or "").strip()
         )
-        added = 0
 
+        # If cloud is configured, pull the data repo's accumulated buffer first
+        # (best-effort — a pull failure doesn't abort the local sync).
+        cloud_pulled = False
         if cloud_configured:
-            pulled = cloud_pull.pull_live()
-            if not pulled:
-                payload = {"ok": False, "message": "Could not pull cloud data. See server logs."}
-                write_last_status(payload)
-                return jsonify(payload), 502
-        else:
-            latest = spotify_sync.compute_latest_event_utc()
-            try:
-                added, _ = spotify_sync.sync_incremental(latest)
-            except Exception as e:
-                logger.exception("Spotify sync failed")
-                payload = {"ok": False, "message": f"Sync failed: {e}"}
-                write_last_status(payload)
-                return jsonify(payload), 500
+            cloud_pulled = cloud_pull.pull_live()
+
+        # Always run a local Spotify sync to pick up the most recent plays.
+        latest = spotify_sync.compute_latest_event_utc()
+        try:
+            added, _ = spotify_sync.sync_incremental(latest)
+        except Exception as e:
+            logger.exception("Spotify sync failed")
+            payload = {"ok": False, "message": f"Sync failed: {e}"}
+            write_last_status(payload)
+            return jsonify(payload), 500
+
+        # Push the updated live buffer back to the data repo so it stays in sync.
+        cloud_pushed = False
+        if cloud_configured:
+            cloud_pushed, _ = cloud_pull.push_live()
+            if not cloud_pushed:
+                logger.warning("Could not push live buffer to data repo after sync.")
 
         try:
             build_dashboard.main()
@@ -224,7 +226,9 @@ def api_refresh():
         new_latest = spotify_sync.compute_latest_event_utc()
         rebuilt_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if cloud_configured:
-            msg = "Pulled latest cloud data."
+            msg = f"Added {added} new play(s)." if added else "No new plays from Spotify (within API window)."
+            if not cloud_pushed:
+                msg += " (warning: could not push to data repo)"
         else:
             msg = f"Added {added} new play(s)." if added else "No new plays from Spotify (within API window)."
         payload = {

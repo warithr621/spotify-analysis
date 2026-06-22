@@ -25,6 +25,77 @@ HISTORY_DIR = BASE / "music-history"
 LIVE_FILENAME = "Streaming_History_Audio_live.json"
 TOKEN_FILENAME = "live_token.json"
 CONTENTS_API = "https://api.github.com/repos/{repo}/contents/{path}"
+GIT_API = "https://api.github.com/repos/{repo}/git"
+
+
+def push_live() -> tuple[bool, str]:
+    """Push the local live buffer to the data repo via Git Data API (handles >1 MB).
+
+    Uses the low-level blob/tree/commit/ref flow because the file exceeds the
+    1 MB limit of the Contents API. Requires DATA_REPO_TOKEN to have Contents
+    write permission on the data repo. Best-effort: returns (False, msg) on any
+    failure without raising.
+    """
+    repo = (os.environ.get("DATA_REPO") or "").strip()
+    token = (os.environ.get("DATA_REPO_TOKEN") or "").strip()
+    if not repo or not token:
+        return False, "DATA_REPO / DATA_REPO_TOKEN not set."
+
+    live_path = HISTORY_DIR / LIVE_FILENAME
+    try:
+        content = live_path.read_bytes()
+    except OSError as e:
+        return False, f"Could not read local live buffer: {e}"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    base = GIT_API.format(repo=repo)
+
+    try:
+        r = requests.get(f"{base}/ref/heads/main", headers=headers, timeout=60)
+        r.raise_for_status()
+        head_sha = r.json()["object"]["sha"]
+
+        r = requests.get(f"{base}/commits/{head_sha}", headers=headers, timeout=60)
+        r.raise_for_status()
+        tree_sha = r.json()["tree"]["sha"]
+
+        r = requests.post(f"{base}/blobs", headers=headers, json={
+            "content": base64.b64encode(content).decode("ascii"),
+            "encoding": "base64",
+        }, timeout=120)
+        r.raise_for_status()
+        blob_sha = r.json()["sha"]
+
+        r = requests.post(f"{base}/trees", headers=headers, json={
+            "base_tree": tree_sha,
+            "tree": [{"path": LIVE_FILENAME, "mode": "100644", "type": "blob", "sha": blob_sha}],
+        }, timeout=60)
+        r.raise_for_status()
+        new_tree_sha = r.json()["sha"]
+
+        r = requests.post(f"{base}/commits", headers=headers, json={
+            "message": f"sync: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} (local push)",
+            "tree": new_tree_sha,
+            "parents": [head_sha],
+        }, timeout=60)
+        r.raise_for_status()
+        new_commit_sha = r.json()["sha"]
+
+        r = requests.patch(f"{base}/refs/heads/main", headers=headers, json={
+            "sha": new_commit_sha,
+        }, timeout=60)
+        r.raise_for_status()
+
+    except requests.RequestException as e:
+        logger.warning("Push live buffer to data repo failed: %s", e)
+        return False, f"Push failed: {e}"
+
+    logger.info("Pushed live buffer (%d bytes) to %s/%s", len(content), repo, LIVE_FILENAME)
+    return True, "Pushed live buffer to data repo."
 
 
 def pull_live() -> bool:
