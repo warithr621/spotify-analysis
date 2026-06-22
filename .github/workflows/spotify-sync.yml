@@ -3,7 +3,7 @@ name: Spotify hourly sync
 
 on:
   schedule:
-    - cron: "0 * * * *"   # hourly (UTC); GitHub may delay/drop under load — backfilled by the `after` cursor
+    - cron: "*/30 * * * *"   # every 30 min (UTC); GitHub may delay/drop under load — backfilled by the `after` cursor
   workflow_dispatch: {}
 
 # Never let two runs touch the data repo at once.
