@@ -86,9 +86,13 @@ def dedup_rows(rows: list[dict]) -> list[dict]:
 
 
 def load_events() -> list[dict]:
-    rows: list[dict] = []
+    export_rows: list[dict] = []
+    live_rows: list[dict] = []
+    export_max_ts: str = ""
+
     files = sorted(glob.glob(str(HISTORY_DIR / AUDIO_GLOB)))
     for fp in files:
+        is_live = Path(fp).name == "Streaming_History_Audio_live.json"
         try:
             with open(fp, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -98,8 +102,33 @@ def load_events() -> list[dict]:
         if not isinstance(data, list):
             logger.warning("Skipping %s: expected list at top level, got %s", fp, type(data).__name__)
             continue
-        rows.extend(data)
-    return dedup_rows(rows)
+        if is_live:
+            live_rows.extend(data)
+        else:
+            export_rows.extend(data)
+            for r in data:
+                ts = str(r.get("ts") or "")
+                if ts > export_max_ts:
+                    export_max_ts = ts
+
+    # Spotify's recently-played API timestamps run 0–3s later than the export for
+    # the same play, so exact (ts, uri) dedup fails to merge them. For any period
+    # covered by an export file, the export is authoritative — drop live rows that
+    # predate the export coverage (with a 4s buffer for the observed max offset).
+    if export_max_ts:
+        cutoff_dt = spotify_sync.parse_ts(export_max_ts)
+        if cutoff_dt:
+            cutoff = (cutoff_dt + timedelta(seconds=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            before = len(live_rows)
+            live_rows = [r for r in live_rows if (str(r.get("ts") or "")) > cutoff]
+            dropped = before - len(live_rows)
+            if dropped:
+                logger.info(
+                    "load_events: dropped %d live rows within export coverage (cutoff %s)",
+                    dropped, cutoff,
+                )
+
+    return dedup_rows(export_rows + live_rows)
 
 
 def latest_timestamp(events: list[dict]) -> datetime | None:
