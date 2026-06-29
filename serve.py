@@ -167,6 +167,42 @@ def oauth_callback():
     )
 
 
+@app.route("/api/pull", methods=["POST"])
+def api_pull():
+    """Pull the live buffer from the data repo (if configured) and rebuild the dashboard.
+    Does NOT call the Spotify API — use /api/refresh for a full rescrape."""
+    if not refresh_thread_lock.acquire(blocking=False):
+        return jsonify(ok=False, message="Another operation is in progress."), 409
+    if not try_acquire_file_lock():
+        refresh_thread_lock.release()
+        return jsonify(ok=False, message="Another operation is in progress."), 409
+
+    try:
+        cloud_configured = bool(
+            (os.environ.get("DATA_REPO") or "").strip()
+            and (os.environ.get("DATA_REPO_TOKEN") or "").strip()
+        )
+        pulled = False
+        if cloud_configured:
+            pulled = cloud_pull.pull_live()
+
+        try:
+            build_dashboard.main()
+        except Exception as e:
+            logger.exception("Dashboard rebuild failed")
+            return jsonify(ok=False, message=f"Rebuild failed: {e}"), 500
+
+        rebuilt_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if cloud_configured:
+            msg = "Pulled latest data from repo and rebuilt dashboard." if pulled else "Rebuilt from local files (cloud pull failed)."
+        else:
+            msg = "Rebuilt dashboard from local files."
+        return jsonify(ok=True, message=msg, rebuilt_at=rebuilt_at), 200
+    finally:
+        release_file_lock()
+        refresh_thread_lock.release()
+
+
 @app.route("/api/refresh/status", methods=["GET"])
 def api_refresh_status():
     if not LAST_STATUS_PATH.is_file():

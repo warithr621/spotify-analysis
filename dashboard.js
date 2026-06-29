@@ -635,6 +635,39 @@ function wireRefreshControls() {
     }
   });
 
+  const pullBtn = document.getElementById("btn-pull");
+  if (pullBtn) {
+    pullBtn.addEventListener("click", async () => {
+      pullBtn.disabled = true;
+      status.style.display = "block";
+      barWrap.style.display = "block";
+      msg.className = "";
+      msg.textContent = "Pulling latest data…";
+      try {
+        const r = await fetch("/api/pull", { method: "POST" });
+        let data = {};
+        try { data = await r.json(); } catch {}
+        barWrap.style.display = "none";
+        if (r.status === 200 && data.ok === true) {
+          msg.className = "ok";
+          msg.textContent = "✓ " + data.message;
+          setTimeout(() => window.location.reload(), 1800);
+        } else {
+          pullBtn.disabled = false;
+          msg.className = "err";
+          msg.textContent =
+            typeof data.message === "string" ? data.message
+            : r.statusText || "Unknown error";
+        }
+      } catch {
+        pullBtn.disabled = false;
+        barWrap.style.display = "none";
+        msg.className = "err";
+        msg.textContent = "Could not reach the local server.";
+      }
+    });
+  }
+
   if (authBtn) {
     authBtn.addEventListener("click", async () => {
       authBtn.disabled = true;
