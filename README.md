@@ -46,7 +46,10 @@ Then open the dashboard in your browser:
 http://127.0.0.1:8765/
 ```
 
-From the dashboard, click **Refresh Spotify data** to authorize Spotify and fetch newer plays.
+From the dashboard, three buttons are available in the top-right corner:
+- **Re-authorize** — run the Spotify OAuth flow and store a new refresh token
+- **Refresh** — pull the latest data from the cloud data repo and rebuild the dashboard (no Spotify API call)
+- **Rescrape** — fetch new plays from Spotify, push them to the cloud data repo, and rebuild the dashboard
 
 # Extended History
 
@@ -65,9 +68,9 @@ This needs a **separate private repo** to hold your live data (so personal liste
 3. Seed the data repo with two files at its root:
    - `Streaming_History_Audio_live.json` — copy your current `music-history/Streaming_History_Audio_live.json` (or `[]` if none yet).
    - `live_token.json` — `{"refresh_token": "<the refresh_token from spotify_tokens.json>"}`.
-4. Create two fine-grained Personal Access Tokens:
-   - **Cloud** (`DATA_REPO_PAT`): Contents **Read and write** on the data repo only.
-   - **Local** (`DATA_REPO_TOKEN`): Contents **Read and write** on the data repo only (read pulls the live buffer; write lets the Re-authorize button push a refreshed token back automatically).
+4. Create two Personal Access Tokens:
+   - **Cloud** (`DATA_REPO_PAT`): fine-grained, Contents **Read and write** on the data repo only. Used by GitHub Actions to check out and commit to the data repo.
+   - **Local** (`DATA_REPO_TOKEN`): fine-grained, Contents **Read and write** on the data repo only. Used locally to pull the live buffer and to push a new refresh token when you click **Re-authorize**.
    Give both an expiry and set a calendar reminder.
 5. On **this** repo (Settings → Secrets and variables → Actions):
    - Secrets: `SPOTIFY_CLIENT_ID`, `DATA_REPO_PAT`.
@@ -76,40 +79,32 @@ This needs a **separate private repo** to hold your live data (so personal liste
 
 	```bash
 	DATA_REPO=yourname/spotify-analysis-data
-	DATA_REPO_TOKEN=your_local_read_pat
+	DATA_REPO_TOKEN=your_local_pat
 	```
 
-7. Enable Actions on this repo, then run **Spotify hourly sync → Run workflow** once. Confirm it's green and a new commit appears in the data repo.
+7. Set up hourly triggering via **cron-job.org** (free):
+   - Create an account at [cron-job.org](https://cron-job.org).
+   - Create a third PAT (fine-grained, **Actions: Read and write** on *this* repo only — not the data repo). This is separate from the two above.
+   - Create a new cron job: `POST https://api.github.com/repos/YOUR_USERNAME/spotify-analysis/actions/workflows/spotify-sync.yml/dispatches`, headers `Authorization: Bearer YOUR_PAT`, `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, body `{"ref":"main"}`, schedule every hour.
+   - Hit **Test run** — it should return 204 and a new Actions run should appear within seconds.
 8. With your Mac off for over an hour, confirm the data repo still gets hourly commits — that proves it's independent of your computer.
 
-Once `DATA_REPO` and `DATA_REPO_TOKEN` are set in `.env`, the dashboard's **Refresh Spotify data** button pulls the cloud buffer instead of calling Spotify directly. With them unset, it behaves exactly as before (direct local Spotify sync), so nothing breaks before you finish setup.
+**Every ~6 months:** Spotify refresh tokens expire 6 months after authorization (refreshing does not reset the clock). Just click **Re-authorize** and approve in the browser — the new token is pushed to the data repo automatically, and the next cloud run picks it up. Optionally update the `SPOTIFY_AUTH_DATE` variable so the workflow's expiry warning resets.
 
-**Every ~6 months:** Spotify refresh tokens expire 6 months after authorization (refreshing does not reset the clock). Just click **Re-authorize Spotify (cloud)** and approve in the browser — the new token is pushed to the data repo automatically (via `DATA_REPO_TOKEN`'s write access), and the next cloud run picks it up. Optionally update the `SPOTIFY_AUTH_DATE` variable so the workflow's expiry warning resets.
+> **Note on the 60-day rule:** GitHub disables workflows with no recent activity after 60 days. `keepalive.yml` ships a small heartbeat commit every ~20 days to prevent that. Unlike a `schedule:` trigger, `workflow_dispatch` is not affected by this rule — but the keepalive is still useful to keep the repo active.
 
-> **Note on the 60-day rule:** GitHub disables scheduled workflows after 60 days with no repo activity. `keepalive.yml` ships a small heartbeat commit every ~20 days to prevent that.
+# Background Serving (macOS)
 
-# Background Serving and Refreshing
+These are Mac-only instructions to have the dashboard server start automatically on login and stay running in the background. The hourly scrape is handled entirely by cron-job.org + GitHub Actions — no local background process is needed for that.
 
-These are Mac-only instructions if you wish to have the dashboard serve in the background, and automatically refresh every hour while your computer is on. With cloud sync configured, the hourly local refresh becomes a **pull** of the cloud data rather than a direct Spotify call.
+1. Replace `USERNAME` in `com.USERNAME.spotify-serve.plist` with your macOS username.
 
-1. Install `launchctl` if you don't have it already:
+2. Move the plist into `~/Library/LaunchAgents/`.
 
-	```bash
-	brew install launchctl
-	```
-
-2. Replace the `USERNAME` in both `.plist` files of this directory with your computer's username. Do the same in the `[USERNAME]` section of both of these, as well as the `spotify_refresh.sh` file.
-
-3. Create the directory `/Users/[USERNAME]/Library/Application Support/spotify-dashboard`, and move the script `spotify_refresh.sh` there.
-
-4. Move the two `.plist` files into `~/Library/LaunchAgents/`.
-
-5. Run the following commands:
+3. Load it:
 
 	```bash
-	plutil -lint ~/Library/LaunchAgents/com.USERNAME.spotify-refresh.plist
 	plutil -lint ~/Library/LaunchAgents/com.USERNAME.spotify-serve.plist
-	launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.USERNAME.spotify-refresh.plist
 	launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.USERNAME.spotify-serve.plist
 	launchctl kickstart -k gui/$(id -u)/com.USERNAME.spotify-serve
 	```
