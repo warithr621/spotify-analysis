@@ -72,13 +72,6 @@ function listeningFriendlyPlain(totalMinutes) {
   return listeningFriendlyWithExact(totalMinutes).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/** Ranking tables: exact rounded listening minutes + readable hint line */
-function tdMinutesFromMs(msPlayed) {
-  const mins = Math.round(Number(msPlayed) / 60000);
-  const hint = fmtMin(msPlayed / 60000);
-  return `<td class="num minutes-cell"><span class="minutes-exact">${fmtNum(mins)} min</span><span class="minutes-hint">${hint}</span></td>`;
-}
-
 function sumDaysInRange(dayTuples, fromDay, toDay) {
   if (!dayTuples || !dayTuples.length) return { ms: 0, n: 0 };
   const lo = dayStrToOff(fromDay),
@@ -284,89 +277,90 @@ function renderCharts() {
     }),
   });
 
-  rebuildTables();
+  rebuildRankings();
   hydrateArtistExplorer();
   renderArtistChart();
 }
 
-let tblSort = { artists:{k:'minutes',rev:false}, albums:{k:'minutes',rev:false}, tracks:{k:'minutes',rev:false}};
 let qArtists='', qAlbums='', qTracks='';
+let ra=[], rt=[], ralb=[];
 
-function highlight(text,q){
-  if (!q.trim()) return text;
-  const esc = q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const re = new RegExp(`(${esc})`,'gi');
-  return String(text||'').replace(re,'<mark>$1</mark>');
+const RANK_CAP = { artists: 160, albums: 200, tracks: 250 };
+
+function minutesCellHtml(ms) {
+  const mins = Math.round(ms / 60000);
+  const hint = fmtMin(ms / 60000);
+  return `<span class="mn">${fmtNum(mins)} min<span class="hint">${hint}</span></span>`;
 }
 
-function rebuildTables(){
+function artHtml(image, rank, label) {
+  if (image) return `<img class="art" src="${escAttr(image)}" alt="" loading="lazy" />`;
+  const initial = (label || "?").trim().slice(0, 1).toUpperCase() || "?";
+  return `<div class="art art-fallback c${rank}">${initial}</div>`;
+}
+
+function rowSearchKey(kind, name, artist) {
+  return `${name} ${kind === "artists" ? "" : artist || ""}`.toLowerCase();
+}
+
+function podiumTileHtml(kind, row, rank) {
+  const name = kind === "albums" ? row.album : kind === "tracks" ? row.title : row.name;
+  const sub = kind === "artists" ? `${fmtNum(row.fn)} streams` : row.artist;
+  return `
+    <div class="podium-tile" data-rank="${rank}" data-name="${escAttr(rowSearchKey(kind, name, row.artist))}">
+      ${artHtml(row.image, rank, name)}
+      <div class="podium-meta-col">
+        <div class="podium-rank">#${rank}</div>
+        <div class="podium-name">${name}</div>
+        <div class="podium-sub">${sub}</div>
+        <div class="podium-min">${fmtNum(Math.round(row.fm / 60000))} min <span class="hint">${fmtMin(row.fm / 60000)}</span></div>
+      </div>
+    </div>`;
+}
+
+function listRowHtml(kind, row, rank) {
+  const name = kind === "albums" ? row.album : kind === "tracks" ? row.title : row.name;
+  const midCell =
+    kind === "artists"
+      ? `<span class="st">${fmtNum(row.fn)}</span>`
+      : `<span class="ar">${row.artist}</span>`;
+  return `
+    <div class="row" data-name="${escAttr(rowSearchKey(kind, name, row.artist))}">
+      <span class="rk">${rank}</span>
+      <span class="nm">${name}</span>
+      ${midCell}
+      ${minutesCellHtml(row.fm)}
+    </div>`;
+}
+
+function applySearchVisibility(kind, q) {
+  const s = q.trim().toLowerCase();
+  const card = document.querySelector(`.rank-card[data-section="${kind}"]`);
+  if (!card) return;
+  card.querySelectorAll(".podium-tile, .list .row:not(.head)").forEach((el) => {
+    const hay = el.dataset.name || "";
+    el.style.display = !s || hay.includes(s) ? "" : "none";
+  });
+}
+
+function renderRankSection(kind, rows, q) {
+  const top3 = rows.slice(0, 3);
+  const rest = rows.slice(3, RANK_CAP[kind]);
+  document.getElementById(`pod-${kind}`).innerHTML = top3.map((r, i) => podiumTileHtml(kind, r, i + 1)).join("");
+  document.getElementById(`list-${kind}`).innerHTML = rest.map((r, i) => listRowHtml(kind, r, i + 4)).join("");
+  applySearchVisibility(kind, q);
+}
+
+function rebuildRankings(){
   const { fromDay, toDay } = state;
-  const windowMs = totalsFromDays(daysSlice(fromDay, toDay)).ms;
 
   ra = rankArtists(fromDay, toDay);
   rt = rankTracks(fromDay, toDay);
   ralb = rankAlbums(fromDay, toDay);
 
-  populateTable("tb-artists", sortRows(applyQ(ra, qArtists), tblSort.artists).slice(0, 160), (row, i) =>
-    `<tr><td class="num">${i + 1}</td><td>${highlight(row.name, qArtists)}</td>${tdMinutesFromMs(row.fm)}<td class="num">${fmtNum(row.fn)}</td><td class="num">${(windowMs > 0 ? (100 * row.fm) / windowMs : 0).toFixed(1)}%</td></tr>`
-  );
-
-  populateTable(
-    "tb-albums",
-    sortRows(applyQ(ralb, qAlbums), tblSort.albums).slice(0, 200),
-    (row, i) =>
-      `<tr><td class="num">${i + 1}</td><td>${highlight(row.album, qAlbums)}</td><td>${highlight(row.artist, qAlbums)}</td>${tdMinutesFromMs(row.fm)}<td class="num">${fmtNum(row.fn)}</td></tr>`
-  );
-
-  populateTable("tb-tracks", sortRows(applyQ(rt, qTracks), tblSort.tracks).slice(0, 250), (row, i) =>
-    `<tr><td class="num">${i + 1}</td><td>${highlight(row.title, qTracks)}</td><td>${highlight(row.artist, qTracks)}</td><td>${highlight(row.album, qTracks)}</td>${tdMinutesFromMs(row.fm)}<td class="num">${fmtNum(row.fn)}</td><td class="num">${(windowMs > 0 ? (100 * row.fm) / windowMs : 0).toFixed(1)}%</td></tr>`
-  );
-}
-
-let ra=[], rt=[], ralb=[];
-function applyQ(rows, q) {
-  const s = q.trim().toLowerCase();
-  if (!s) return rows;
-  return rows.filter((r) => {
-    const blob = `${r.name || ""} ${r.title || ""} ${r.artist || ""} ${r.album || ""}`.toLowerCase();
-    return blob.includes(s);
-  });
-}
-
-function sortRows(rows, s) {
-  const flip = s.rev ? -1 : 1;
-  const kmap = {
-    minutes: (r) => r.fm || 0,
-    streams: (r) => r.fn || 0,
-    pct: (r) => r.fm || 0,
-    title: (r) => r.title || r.album || "",
-    subtitle: (r) => r.artist || r.name || "",
-    album: (r) => r.album || "",
-    name: (r) => r.name || "",
-  };
-  if (s.k === "rnk" || !kmap[s.k]) return rows.slice();
-  const kk = kmap[s.k];
-  return rows.slice().sort((a, b) => {
-    const va = kk(a),
-      vb = kk(b);
-    let cmp = 0;
-    if (typeof va === "number" && typeof vb === "number") {
-      cmp = vb - va;
-    } else {
-      cmp = String(va).localeCompare(String(vb), undefined, { sensitivity: "base" });
-    }
-    if (flip === -1) cmp = typeof va === "number" && typeof vb === "number" ? va - vb : -cmp;
-    if (cmp !== 0) return cmp;
-    const pa = `${a.title || a.name || a.album || ""}`;
-    const pb = `${b.title || b.name || b.album || ""}`;
-    return pa.localeCompare(pb, undefined, { sensitivity: "base" });
-  });
-}
-
-function populateTable(id, mapperRows, mapper) {
-  const body = document.getElementById(id);
-  if (!body) return;
-  body.innerHTML = mapperRows.map(mapper).join("");
+  renderRankSection("artists", ra, qArtists);
+  renderRankSection("albums", ralb, qAlbums);
+  renderRankSection("tracks", rt, qTracks);
 }
 
 function escAttr(v) {
@@ -699,24 +693,9 @@ function wireRefreshControls() {
 }
 
 function wireInteractions(){
-  document.querySelectorAll("#rankings .table-card table thead").forEach(thead=>{
-    const tbody = thead.closest('.table-card').querySelector('tbody').id;
-    const key =
-      tbody==='tb-artists'?'artists':
-      tbody==='tb-albums'?'albums':'tracks';
-    thead.querySelectorAll('th[data-k]').forEach(th=>{
-      th.onclick=()=>{
-        const k = th.dataset.k;
-        const cur=tblSort[key];
-        tblSort[key]={k, rev: cur.k===k?!cur.rev:false};
-        rebuildTables();
-      };
-    });
-  });
-
-  document.getElementById('srch-artists').addEventListener('input', e=>{ qArtists=e.target.value; rebuildTables(); });
-  document.getElementById('srch-albums').addEventListener('input', e=>{ qAlbums=e.target.value; rebuildTables(); });
-  document.getElementById('srch-tracks').addEventListener('input', e=>{ qTracks=e.target.value; rebuildTables(); });
+  document.getElementById('srch-artists').addEventListener('input', e=>{ qArtists=e.target.value; applySearchVisibility('artists', qArtists); });
+  document.getElementById('srch-albums').addEventListener('input', e=>{ qAlbums=e.target.value; applySearchVisibility('albums', qAlbums); });
+  document.getElementById('srch-tracks').addEventListener('input', e=>{ qTracks=e.target.value; applySearchVisibility('tracks', qTracks); });
 }
 
 bootstrap();

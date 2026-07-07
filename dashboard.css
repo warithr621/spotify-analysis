@@ -408,6 +408,172 @@ button:disabled { opacity: 0.45; cursor: default; transform: none; }
   overflow: hidden;
 }
 
+/* Rankings: full-width per category, a stepped 2nd/1st/3rd podium above a
+   compact list. Replaces the old 3-cards-side-by-side layout, which forced
+   every table into a cramped ~380px column and needed horizontal scroll. */
+.rank-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.25rem 1.35rem;
+  margin-bottom: 1.5rem;
+}
+.rank-card:last-child { margin-bottom: 0; }
+.rank-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 1.3rem;
+}
+.rank-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.rank-head input[type="search"] { width: 15rem; max-width: 100%; }
+
+.podium {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.podium-tile {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.4rem;
+}
+.podium-tile[data-rank="1"] { order: 2; }
+.podium-tile[data-rank="2"] { order: 1; }
+.podium-tile[data-rank="3"] { order: 3; }
+
+.podium-tile .art {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 8px 18px -10px rgba(42, 10, 74, 0.5);
+  display: block;
+}
+.podium-tile[data-rank="1"] .art { width: 84px; height: 84px; border-radius: 12px; }
+.art-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: #fff;
+}
+.podium-tile[data-rank="1"] .art-fallback { font-size: 1.5rem; }
+.art-fallback.c1 { background: linear-gradient(145deg, var(--accent-fuchsia), #7c1180); }
+.art-fallback.c2 { background: linear-gradient(145deg, var(--accent-lilac), #641da3); }
+.art-fallback.c3 { background: linear-gradient(145deg, var(--accent-pink), #971155); }
+
+.podium-rank {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.podium-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.98rem;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.podium-tile[data-rank="1"] .podium-name { font-size: 1.16rem; font-weight: 700; }
+.podium-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.podium-min {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.podium-min .hint { font-weight: 500; color: var(--muted); font-size: 0.7rem; margin-left: 0.3rem; }
+
+.step {
+  width: 100%;
+  border-radius: 8px 8px 3px 3px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-display);
+  font-weight: 900;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.35rem;
+}
+.podium-tile[data-rank="1"] .step { height: 84px; font-size: 1.6rem; background: linear-gradient(160deg, var(--accent-fuchsia), #7c1180); }
+.podium-tile[data-rank="2"] .step { height: 62px; font-size: 1.3rem; background: linear-gradient(160deg, var(--accent-lilac), #641da3); }
+.podium-tile[data-rank="3"] .step { height: 46px; font-size: 1.15rem; background: linear-gradient(160deg, var(--accent-pink), #971155); }
+
+.list {
+  border-top: 1px solid var(--border-soft);
+  max-height: 420px;
+  overflow-y: auto;
+}
+.row {
+  display: grid;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.15rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.rank-card[data-section="artists"] .row { grid-template-columns: 2.2rem minmax(0,1.6fr) 6rem 7rem; }
+.rank-card[data-section="albums"] .row,
+.rank-card[data-section="tracks"] .row { grid-template-columns: 2.2rem minmax(0,1.5fr) minmax(0,1fr) 7rem; }
+.row.head {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  z-index: 1;
+}
+.row.head .num-head { text-align: right; }
+.row:not(.head):hover { background: rgba(245, 235, 255, 0.65); }
+.row .rk { font-family: var(--font-mono); color: var(--muted); font-size: 0.85rem; }
+.row .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .ar { color: var(--muted); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .mn, .row .st { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.row .mn .hint { display: block; font-size: 0.68rem; font-weight: 500; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .podium { flex-direction: column; align-items: stretch; gap: 0.7rem; }
+  .podium-tile { order: initial !important; flex-direction: row; text-align: left; gap: 0.7rem; }
+  .podium-tile .podium-meta-col { display: flex; flex-direction: column; align-items: flex-start; }
+  .podium-tile[data-rank="1"] .art { width: 64px; height: 64px; }
+  .step { display: none; }
+  .rank-card[data-section="artists"] .row { grid-template-columns: 1.6rem 1fr 4rem 5.5rem; }
+  .rank-card[data-section="albums"] .row,
+  .rank-card[data-section="tracks"] .row { grid-template-columns: 1.6rem 1fr 4.5rem; }
+  .rank-card[data-section="albums"] .row .ar,
+  .rank-card[data-section="tracks"] .row .ar,
+  .rank-card[data-section="albums"] .row .artist-head,
+  .rank-card[data-section="tracks"] .row .artist-head { display: none; }
+}
+
 .artist-controls {
   margin-bottom: 0.4rem;
 }
@@ -490,48 +656,6 @@ th {
 }
 th:hover { color: var(--text); }
 tbody tr:hover { background: rgba(245, 235, 255, 0.65); }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-th.num,
-td.num {
-  white-space: nowrap;
-}
-th.col-minutes,
-td.minutes-cell {
-  min-width: 9.25rem;
-  padding-left: 0.65rem;
-  text-align: right;
-}
-.minutes-exact {
-  display: block;
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
-.minutes-hint {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-weight: 500;
-  margin-top: 0.2rem;
-}
-.scroll {
-  max-height: 520px;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
-  border-radius: 10px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.45);
-  -webkit-overflow-scrolling: touch;
-}
-mark {
-  background: rgba(232, 121, 249, 0.35);
-  color: inherit;
-  padding: 0 2px;
-  border-radius: 2px;
-}
 
 footer {
   margin-top: 4rem;

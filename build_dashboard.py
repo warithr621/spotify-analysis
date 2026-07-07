@@ -23,6 +23,7 @@ HISTORY_DIR = BASE / "music-history"
 TEMPLATE = BASE / "template.html"
 OUT_HTML = BASE / "dashboard.html"
 AUDIO_GLOB = "Streaming_History_Audio_*.json"
+ART_CACHE_PATH = BASE / "art_cache.json"
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +177,17 @@ def canon_album_key(album_name: str, artist_name: str) -> str:
 def day_index(day_iso: str, epoch: date) -> int:
     """Days since epoch (calendar math only; matches Chicago wall dates in the bundle)."""
     return (datetime.fromisoformat(day_iso).date() - epoch).days
+
+
+def load_art_cache() -> dict:
+    """Read-only lookup into art_cache.json (populated by art_sync.py). Missing
+    or unparsable cache just means no art yet -- the frontend falls back to a
+    colored initial tile, so this never raises."""
+    try:
+        with open(ART_CACHE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def top_recent_streams(events: list[dict], n: int = 20) -> list[dict]:
@@ -371,6 +383,8 @@ def main() -> None:
             for dk, dv in sorted(days_raw.items())
         ]
 
+    art_cache = load_art_cache()
+
     top_artists = sorted(artist_ms.keys(), key=lambda a: (-artist_ms[a], a.lower()))[:ARTIST_MONTHLY_CAP]
     artists_out = []
     for a in top_artists:
@@ -380,6 +394,7 @@ def main() -> None:
                 "name": a,
                 "ms": artist_ms[a],
                 "n": artist_n[a],
+                "image": art_cache.get(f"artist:{a.lower()}"),
                 "days": compact_days(days_raw),
             }
         )
@@ -398,6 +413,7 @@ def main() -> None:
                 "uri": b["uri"],
                 "ms": b["ms"],
                 "n": b["n"],
+                "image": art_cache.get(f"track:{k}"),
                 "days": compact_days(days_raw),
             }
         )
@@ -414,6 +430,7 @@ def main() -> None:
                 "artist": b["artist"],
                 "ms": b["ms"],
                 "n": b["n"],
+                "image": art_cache.get(f"album:{k}"),
                 "days": compact_days(days_raw),
             }
         )

@@ -125,47 +125,50 @@
       <h2>Rankings</h2>
       <span>Your favorite artists, albums, and tracks</span>
     </div>
-    <div class="rankings-stack">
-      <div class="table-card">
-        <div class="table-head">
-          <h3>Artists</h3>
-          <input type="search" id="srch-artists" placeholder="Search…" />
-        </div>
-        <div class="scroll"><table><thead><tr>
-          <th data-k="rnk">#</th>
-          <th data-k="name">Name</th>
-          <th class="num col-minutes" data-k="minutes">Minutes</th>
-          <th class="num" data-k="streams">Streams</th>
-          <th class="num" data-k="pct">Share</th>
-        </tr></thead><tbody id="tb-artists"></tbody></table></div>
+
+    <div class="rank-card" data-section="artists">
+      <div class="rank-head">
+        <h3>Artists</h3>
+        <input type="search" id="srch-artists" placeholder="Search artists…" />
       </div>
-      <div class="table-card">
-        <div class="table-head">
-          <h3>Albums</h3>
-          <input type="search" id="srch-albums" placeholder="Search…" />
+      <div class="podium" id="pod-artists"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Name</span>
+          <span class="num-head">Streams</span>
+          <span class="num-head">Minutes</span>
         </div>
-        <div class="scroll"><table><thead><tr>
-          <th data-k="rnk">#</th>
-          <th data-k="title">Album</th>
-          <th data-k="subtitle">Artist</th>
-          <th class="num col-minutes" data-k="minutes">Minutes</th>
-          <th class="num" data-k="streams">Streams</th>
-        </tr></thead><tbody id="tb-albums"></tbody></table></div>
+        <div id="list-artists"></div>
       </div>
-      <div class="table-card">
-        <div class="table-head">
-          <h3>Tracks</h3>
-          <input type="search" id="srch-tracks" placeholder="Search…" />
+    </div>
+
+    <div class="rank-card" data-section="albums">
+      <div class="rank-head">
+        <h3>Albums</h3>
+        <input type="search" id="srch-albums" placeholder="Search albums…" />
+      </div>
+      <div class="podium" id="pod-albums"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Album</span><span class="artist-head">Artist</span>
+          <span class="num-head">Minutes</span>
         </div>
-        <div class="scroll"><table><thead><tr>
-          <th data-k="rnk">#</th>
-          <th data-k="title">Track</th>
-          <th data-k="subtitle">Artist</th>
-          <th data-k="album">Album</th>
-          <th class="num col-minutes" data-k="minutes">Minutes</th>
-          <th class="num" data-k="streams">Streams</th>
-          <th class="num" data-k="pct">Share</th>
-        </tr></thead><tbody id="tb-tracks"></tbody></table></div>
+        <div id="list-albums"></div>
+      </div>
+    </div>
+
+    <div class="rank-card" data-section="tracks">
+      <div class="rank-head">
+        <h3>Tracks</h3>
+        <input type="search" id="srch-tracks" placeholder="Search tracks…" />
+      </div>
+      <div class="podium" id="pod-tracks"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Track</span><span class="artist-head">Artist</span>
+          <span class="num-head">Minutes</span>
+        </div>
+        <div id="list-tracks"></div>
       </div>
     </div>
     </section>

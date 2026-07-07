@@ -14,6 +14,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_file
 
+import art_sync
 import build_dashboard
 import cloud_pull
 import spotify_sync
@@ -250,6 +251,16 @@ def api_refresh():
             cloud_pushed, _ = cloud_pull.push_live()
             if not cloud_pushed:
                 logger.warning("Could not push live buffer to data repo after sync.")
+
+        # Fetch real Spotify art for the current top artists/albums/tracks not
+        # already cached. Best-effort -- a failure here shouldn't block the
+        # rebuild, it just means art stays on the fallback tile a bit longer.
+        try:
+            art_ok, art_msg = art_sync.refresh_art_cache()
+            if not art_ok:
+                logger.warning("Art cache refresh: %s", art_msg)
+        except Exception:
+            logger.exception("Art cache refresh crashed (non-fatal)")
 
         try:
             build_dashboard.main()
