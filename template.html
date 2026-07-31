@@ -34,6 +34,14 @@
             <button type="button" id="btn-authorize">Re-authorize</button>
             <button type="button" id="btn-pull">Refresh</button>
             <button type="button" id="btn-refresh">Rescrape</button>
+            <label class="metric-switch" id="metric-switch" data-metric="minutes">
+              <span class="metric-switch-lbl" data-metric-lbl="minutes">Minutes</span>
+              <span class="metric-switch-track">
+                <input type="checkbox" id="metric-toggle-input" />
+                <span class="metric-switch-thumb"></span>
+              </span>
+              <span class="metric-switch-lbl" data-metric-lbl="plays">Plays</span>
+            </label>
             <div id="refresh-status">
               <div id="refresh-bar-wrap"><div id="refresh-bar"></div></div>
               <div id="refresh-msg"></div>
@@ -135,8 +143,8 @@
       <div class="list">
         <div class="row head">
           <span></span><span>Name</span>
-          <span class="num-head">Streams</span>
-          <span class="num-head">Minutes</span>
+          <span class="num-head" id="hd-artists-2">Streams</span>
+          <span class="num-head" id="hd-artists-3">Minutes</span>
         </div>
         <div id="list-artists"></div>
       </div>
@@ -151,7 +159,7 @@
       <div class="list">
         <div class="row head">
           <span></span><span>Album</span><span class="artist-head">Artist</span>
-          <span class="num-head">Minutes</span>
+          <span class="num-head" id="hd-albums-metric">Minutes</span>
         </div>
         <div id="list-albums"></div>
       </div>
@@ -166,7 +174,7 @@
       <div class="list">
         <div class="row head">
           <span></span><span>Track</span><span class="artist-head">Artist</span>
-          <span class="num-head">Minutes</span>
+          <span class="num-head" id="hd-tracks-metric">Minutes</span>
         </div>
         <div id="list-tracks"></div>
       </div>

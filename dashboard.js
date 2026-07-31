@@ -107,34 +107,37 @@ function totalsFromDays(days) {
   return { ms, n };
 }
 
-function rankArtists(fromDay, toDay) {
+function rankArtists(fromDay, toDay, metric = "minutes") {
   const out = [];
   for (const a of DATA.artists) {
     const s = sumDaysInRange(a.days, fromDay, toDay);
     if (s.ms <= 0) continue;
     out.push({ ...a, fm: s.ms, fn: s.n });
   }
-  out.sort((a,b)=>b.fm-a.fm||a.name.localeCompare(b.name));
+  if (metric === "plays") out.sort((a,b)=>b.fn-a.fn||a.name.localeCompare(b.name));
+  else out.sort((a,b)=>b.fm-a.fm||a.name.localeCompare(b.name));
   return out;
 }
-function rankTracks(fromDay, toDay) {
+function rankTracks(fromDay, toDay, metric = "minutes") {
   const out = [];
   for (const t of DATA.tracks) {
     const s = sumDaysInRange(t.days, fromDay, toDay);
     if (s.ms <= 0) continue;
     out.push({ ...t, fm: s.ms, fn: s.n });
   }
-  out.sort((a,b)=>b.fm-a.fm||a.title.localeCompare(b.title));
+  if (metric === "plays") out.sort((a,b)=>b.fn-a.fn||a.title.localeCompare(b.title));
+  else out.sort((a,b)=>b.fm-a.fm||a.title.localeCompare(b.title));
   return out;
 }
-function rankAlbums(fromDay, toDay) {
+function rankAlbums(fromDay, toDay, metric = "minutes") {
   const out = [];
   for (const al of DATA.albums) {
     const s = sumDaysInRange(al.days, fromDay, toDay);
     if (s.ms <= 0) continue;
     out.push({ ...al, fm: s.ms, fn: s.n });
   }
-  out.sort((a,b)=>b.fm-a.fm||a.album.localeCompare(b.album));
+  if (metric === "plays") out.sort((a,b)=>b.fn-a.fn||a.album.localeCompare(b.album));
+  else out.sort((a,b)=>b.fm-a.fm||a.album.localeCompare(b.album));
   return out;
 }
 
@@ -284,13 +287,18 @@ function renderCharts() {
 
 let qArtists='', qAlbums='', qTracks='';
 let ra=[], rt=[], ralb=[];
+let metric = "minutes";
 
 const RANK_CAP = { artists: 160, albums: 200, tracks: 250 };
 
-function minutesCellHtml(ms) {
+function minutesCellHtml(ms, showHint = true) {
   const mins = Math.round(ms / 60000);
-  const hint = fmtMin(ms / 60000);
-  return `<span class="mn">${fmtNum(mins)} min<span class="hint">${hint}</span></span>`;
+  const hint = showHint ? `<span class="hint">${fmtMin(ms / 60000)}</span>` : "";
+  return `<span class="mn">${fmtNum(mins)} min${hint}</span>`;
+}
+
+function streamsCellHtml(n) {
+  return `<span class="st">${fmtNum(n)}</span>`;
 }
 
 function artHtml(image, rank, label) {
@@ -303,9 +311,23 @@ function rowSearchKey(kind, name, artist) {
   return `${name} ${kind === "artists" ? "" : artist || ""}`.toLowerCase();
 }
 
-function podiumTileHtml(kind, row, rank) {
+function podiumTileHtml(kind, row, rank, metric) {
   const name = kind === "albums" ? row.album : kind === "tracks" ? row.title : row.name;
-  const sub = kind === "artists" ? `${fmtNum(row.fn)} streams` : row.artist;
+  const minStat = `${fmtNum(Math.round(row.fm / 60000))} min <span class="hint">${fmtMin(row.fm / 60000)}</span>`;
+  const streamStat = `${fmtNum(row.fn)} streams`;
+  let sub, mainStat;
+  if (kind === "artists") {
+    if (metric === "plays") {
+      sub = `${fmtNum(Math.round(row.fm / 60000))} min`;
+      mainStat = streamStat;
+    } else {
+      sub = streamStat;
+      mainStat = minStat;
+    }
+  } else {
+    sub = row.artist;
+    mainStat = metric === "plays" ? streamStat : minStat;
+  }
   return `
     <div class="podium-tile" data-rank="${rank}" data-name="${escAttr(rowSearchKey(kind, name, row.artist))}">
       ${artHtml(row.image, rank, name)}
@@ -313,23 +335,32 @@ function podiumTileHtml(kind, row, rank) {
         <div class="podium-rank">#${rank}</div>
         <div class="podium-name">${name}</div>
         <div class="podium-sub">${sub}</div>
-        <div class="podium-min">${fmtNum(Math.round(row.fm / 60000))} min <span class="hint">${fmtMin(row.fm / 60000)}</span></div>
+        <div class="podium-min">${mainStat}</div>
       </div>
     </div>`;
 }
 
-function listRowHtml(kind, row, rank) {
+function listRowHtml(kind, row, rank, metric) {
   const name = kind === "albums" ? row.album : kind === "tracks" ? row.title : row.name;
-  const midCell =
-    kind === "artists"
-      ? `<span class="st">${fmtNum(row.fn)}</span>`
-      : `<span class="ar">${row.artist}</span>`;
+  let midCell, lastCell;
+  if (kind === "artists") {
+    if (metric === "plays") {
+      midCell = minutesCellHtml(row.fm, false);
+      lastCell = streamsCellHtml(row.fn);
+    } else {
+      midCell = streamsCellHtml(row.fn);
+      lastCell = minutesCellHtml(row.fm, true);
+    }
+  } else {
+    midCell = `<span class="ar">${row.artist}</span>`;
+    lastCell = metric === "plays" ? streamsCellHtml(row.fn) : minutesCellHtml(row.fm, true);
+  }
   return `
     <div class="row" data-name="${escAttr(rowSearchKey(kind, name, row.artist))}">
       <span class="rk">${rank}</span>
       <span class="nm">${name}</span>
       ${midCell}
-      ${minutesCellHtml(row.fm)}
+      ${lastCell}
     </div>`;
 }
 
@@ -343,24 +374,39 @@ function applySearchVisibility(kind, q) {
   });
 }
 
-function renderRankSection(kind, rows, q) {
+function renderRankSection(kind, rows, q, metric) {
   const top3 = rows.slice(0, 3);
   const rest = rows.slice(3, RANK_CAP[kind]);
-  document.getElementById(`pod-${kind}`).innerHTML = top3.map((r, i) => podiumTileHtml(kind, r, i + 1)).join("");
-  document.getElementById(`list-${kind}`).innerHTML = rest.map((r, i) => listRowHtml(kind, r, i + 4)).join("");
+  document.getElementById(`pod-${kind}`).innerHTML = top3.map((r, i) => podiumTileHtml(kind, r, i + 1, metric)).join("");
+  document.getElementById(`list-${kind}`).innerHTML = rest.map((r, i) => listRowHtml(kind, r, i + 4, metric)).join("");
   applySearchVisibility(kind, q);
+}
+
+function updateRankHeaders(metric){
+  const a2 = document.getElementById("hd-artists-2");
+  const a3 = document.getElementById("hd-artists-3");
+  if (a2 && a3) {
+    if (metric === "plays") { a2.textContent = "Minutes"; a3.textContent = "Streams"; }
+    else { a2.textContent = "Streams"; a3.textContent = "Minutes"; }
+  }
+  const albumsHd = document.getElementById("hd-albums-metric");
+  if (albumsHd) albumsHd.textContent = metric === "plays" ? "Streams" : "Minutes";
+  const tracksHd = document.getElementById("hd-tracks-metric");
+  if (tracksHd) tracksHd.textContent = metric === "plays" ? "Streams" : "Minutes";
 }
 
 function rebuildRankings(){
   const { fromDay, toDay } = state;
 
-  ra = rankArtists(fromDay, toDay);
-  rt = rankTracks(fromDay, toDay);
-  ralb = rankAlbums(fromDay, toDay);
+  ra = rankArtists(fromDay, toDay, metric);
+  rt = rankTracks(fromDay, toDay, metric);
+  ralb = rankAlbums(fromDay, toDay, metric);
 
-  renderRankSection("artists", ra, qArtists);
-  renderRankSection("albums", ralb, qAlbums);
-  renderRankSection("tracks", rt, qTracks);
+  renderRankSection("artists", ra, qArtists, metric);
+  renderRankSection("albums", ralb, qAlbums, metric);
+  renderRankSection("tracks", rt, qTracks, metric);
+
+  updateRankHeaders(metric);
 }
 
 function escAttr(v) {
@@ -696,6 +742,16 @@ function wireInteractions(){
   document.getElementById('srch-artists').addEventListener('input', e=>{ qArtists=e.target.value; applySearchVisibility('artists', qArtists); });
   document.getElementById('srch-albums').addEventListener('input', e=>{ qAlbums=e.target.value; applySearchVisibility('albums', qAlbums); });
   document.getElementById('srch-tracks').addEventListener('input', e=>{ qTracks=e.target.value; applySearchVisibility('tracks', qTracks); });
+
+  const metricSwitch = document.getElementById('metric-switch');
+  const metricInput = document.getElementById('metric-toggle-input');
+  if (metricSwitch && metricInput) {
+    metricInput.addEventListener('change', () => {
+      metric = metricInput.checked ? 'plays' : 'minutes';
+      metricSwitch.dataset.metric = metric;
+      rebuildRankings();
+    });
+  }
 }
 
 bootstrap();
