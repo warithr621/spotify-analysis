@@ -370,11 +370,6 @@ def main() -> None:
     year_keys_sorted = sorted(glob_year_ms.keys(), key=int)
     year_series = [{"y": y, "ms": glob_year_ms[y], "n": glob_year_n[y]} for y in year_keys_sorted]
 
-    # Top entities with per-day breakdown (limit for payload size)
-    ARTIST_MONTHLY_CAP = 2500
-    TRACK_MONTHLY_CAP = 2600
-    ALBUM_MONTHLY_CAP = 1400
-
     def compact_days(days_raw: dict[str, tuple[int, int]]) -> list[list[int]]:
         if epoch_date is None:
             return []
@@ -385,7 +380,7 @@ def main() -> None:
 
     art_cache = load_art_cache()
 
-    top_artists = sorted(artist_ms.keys(), key=lambda a: (-artist_ms[a], a.lower()))[:ARTIST_MONTHLY_CAP]
+    top_artists = sorted(artist_ms.keys(), key=lambda a: (-artist_ms[a], a.lower()))
     artists_out = []
     for a in top_artists:
         days_raw = artist_daily[a]
@@ -399,7 +394,7 @@ def main() -> None:
             }
         )
 
-    top_track_keys = sorted(track_bucket.keys(), key=lambda k: (-track_bucket[k]["ms"], k))[:TRACK_MONTHLY_CAP]
+    top_track_keys = sorted(track_bucket.keys(), key=lambda k: (-track_bucket[k]["ms"], k))
     tracks_out = []
     for k in top_track_keys:
         b = track_bucket[k]
@@ -418,7 +413,7 @@ def main() -> None:
             }
         )
 
-    top_album_keys = sorted(album_bucket.keys(), key=lambda k: (-album_bucket[k]["ms"], k))[:ALBUM_MONTHLY_CAP]
+    top_album_keys = sorted(album_bucket.keys(), key=lambda k: (-album_bucket[k]["ms"], k))
     albums_out = []
     for k in top_album_keys:
         b = album_bucket[k]
