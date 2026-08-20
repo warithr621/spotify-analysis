@@ -191,7 +191,7 @@ function renderKpis({ fromDay, toDay }) {
   const avgPerActiveDay = uniqDays ? minutesTotal / uniqDays : 0;
 
   const rows = [
-    ["Filtered listening time", fmtMin(minutesTotal), plays ? `${fmtNum(plays)} plays` : ""],
+    ["Filtered listening time", `${fmtNum(minutesTotal)} min`, plays ? `${fmtNum(plays)} plays` : ""],
     ["Artists in window", fmtNum(uniqArtistsApprox), ""],
     ["Tracks in window", fmtNum(tr), ""],
     ["Peak streaming month", peak.m || "—", peak.m ? fmtMin(peak.ms / 60000) : ""],
