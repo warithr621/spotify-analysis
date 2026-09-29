@@ -107,13 +107,20 @@ def _top_entities_needing_art(
     return need_tracks, need_albums, need_artists
 
 
-def _search(headers: dict, query: str, entity_type: str) -> dict | None:
+def _search(headers: dict, query: str, entity_type: str, matches) -> dict | None:
+    """Return the first search result satisfying `matches`, or None. Spotify's
+    top hit is unreliable (with limit=1 it often returns a different artist
+    entirely), so fetch several and verify instead of trusting items[0]."""
     r = requests.get(
-        SEARCH_URL, headers=headers, params={"q": query, "type": entity_type, "limit": 1}, timeout=15
+        SEARCH_URL, headers=headers, params={"q": query, "type": entity_type, "limit": 10}, timeout=15
     )
     r.raise_for_status()
     items = (r.json().get(f"{entity_type}s") or {}).get("items") or []
-    return items[0] if items else None
+    return next((it for it in items if it and matches(it)), None)
+
+
+def _has_artist(item: dict, artist: str) -> bool:
+    return artist.lower() in {(a.get("name") or "").lower() for a in item.get("artists") or []}
 
 
 def refresh_art_cache() -> tuple[bool, str]:
@@ -133,7 +140,7 @@ def refresh_art_cache() -> tuple[bool, str]:
 
         for tkey, (title, artist) in need_tracks.items():
             try:
-                item = _search(headers, f"{title} {artist}", "track")
+                item = _search(headers, f"{title} {artist}", "track", lambda it: _has_artist(it, artist))
                 images = ((item or {}).get("album") or {}).get("images") or []
                 if images:
                     cache[f"track:{tkey}"] = images[-1]["url"]
@@ -143,7 +150,7 @@ def refresh_art_cache() -> tuple[bool, str]:
 
         for akey, (album, artist) in need_albums.items():
             try:
-                item = _search(headers, f"{album} {artist}", "album")
+                item = _search(headers, f"{album} {artist}", "album", lambda it: _has_artist(it, artist))
                 images = (item or {}).get("images") or []
                 if images:
                     cache[f"album:{akey}"] = images[-1]["url"]
@@ -153,7 +160,7 @@ def refresh_art_cache() -> tuple[bool, str]:
 
         for name in need_artists:
             try:
-                item = _search(headers, name, "artist")
+                item = _search(headers, name, "artist", lambda it: (it.get("name") or "").lower() == name.lower())
                 images = (item or {}).get("images") or []
                 if images:
                     cache[f"artist:{name.lower()}"] = images[-1]["url"]
