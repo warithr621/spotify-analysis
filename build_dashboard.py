@@ -27,7 +27,7 @@ ART_CACHE_PATH = BASE / "art_cache.json"
 
 # Artist relationship graph: artists are "related" when they show up in the same
 # listening session. Only the top GRAPH_ARTIST_CAP artists (by minutes) are
-# tracked, so artist index i in a session row is also DATA.artists[i] in the JS.
+# tracked; artist index i in a session row is DATA.graph_artists[i] in the JS.
 GRAPH_ARTIST_CAP = 400
 GRAPH_SESSION_GAP = timedelta(minutes=30)
 GRAPH_MIN_PLAY_MS = 30_000
@@ -438,9 +438,10 @@ def main() -> None:
             }
         )
 
+    graph_artists = top_artists[:GRAPH_ARTIST_CAP]
     artist_sessions = build_artist_sessions(
         play_log,
-        {a: i for i, a in enumerate(top_artists[:GRAPH_ARTIST_CAP])},
+        {a: i for i, a in enumerate(graph_artists)},
         epoch_date,
     )
 
@@ -563,7 +564,7 @@ def main() -> None:
         "albums": albums_out,
         "recent_streams": recent_streams,
         "artist_sessions": artist_sessions,
-        "graph_artist_cap": GRAPH_ARTIST_CAP,
+        "graph_artists": graph_artists,
         "notes": (
             "Spotify Extended Streaming History does not include genre metadata; podcast/audiobook rows excluded. "
             "Tracks and albums collapse duplicate rows that match the same normalized title + performer "

@@ -740,16 +740,25 @@ footer {
 .web-host:active { cursor: grabbing; }
 .web-host svg { display: block; }
 .web-empty { padding: 3rem 1rem; text-align: center; color: var(--muted); }
-.web-links line { stroke: var(--accent-lilac); transition: opacity 0.15s; }
+.web-links line { transition: opacity 0.15s; }
+.web-links line.cross { stroke: var(--accent-lilac); }
 .web-links line.hot { stroke: var(--accent-pink); stroke-opacity: 0.9; }
 .web-node { cursor: pointer; transition: opacity 0.15s; }
 .web-initial { fill: #fff; font-weight: 700; font-size: 14px; pointer-events: none; }
 .web-label { fill: var(--text); font-size: 11px; font-weight: 500; pointer-events: none; paint-order: stroke; stroke: var(--card-hover); stroke-width: 3px; }
+.web-node:not(.labeled):not(.near) .web-label { display: none; }
 .web-node.dim, .web-links line.dim { opacity: 0.12; }
-.web-tip { position: absolute; z-index: 5; max-width: 200px; padding: 0.55rem 0.7rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; line-height: 1.4; color: var(--text); pointer-events: none; }
-.web-tip ul { margin: 0.35rem 0 0; padding: 0; list-style: none; }
-.web-tip li { display: flex; justify-content: space-between; gap: 0.5rem; }
-.web-tip li span { color: var(--muted); }
+.web-stage { position: relative; }
+.web-tip, .web-panel { position: absolute; z-index: 5; max-width: 220px; padding: 0.55rem 0.7rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; line-height: 1.4; color: var(--text); }
+.web-tip { pointer-events: none; }
+.web-panel { top: 10px; right: 10px; width: 220px; box-shadow: 0 6px 20px rgba(42, 10, 74, 0.12); }
+.web-panel button { width: 100%; margin-top: 0.6rem; }
+.web-sub { margin-top: 0.3rem; color: var(--muted); font-size: 0.75rem; }
+.web-tip ul, .web-panel ul { margin: 0.2rem 0 0; padding: 0; list-style: none; }
+.web-tip li, .web-panel li { display: flex; justify-content: space-between; gap: 0.5rem; }
+.web-tip li span, .web-panel li span { color: var(--muted); white-space: nowrap; }
+.web-legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; margin-top: 0.6rem; color: var(--muted); font-size: 0.8rem; }
+.web-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 0.4rem; border-radius: 50%; vertical-align: -1px; }
 #artist-web .chart-card { position: relative; }
 .web-controls select { width: auto; }
 .anim-controls select { width: auto; }

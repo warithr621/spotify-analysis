@@ -1351,31 +1351,35 @@ function wireRaceControls() {
 
 /* ---------- Artist web (d3 force graph) ---------- */
 
-const WEB_PALETTE = ["#c026d3", "#db2777", "#6366f1", "#f97316", "#0ea5e9", "#10b981", "#eab308", "#9333ea"];
+// Ordered so the first few clusters (the ones that usually exist) contrast most.
+const WEB_PALETTE = ["#c026d3", "#6366f1", "#f97316", "#0ea5e9", "#10b981", "#db2777", "#eab308", "#9333ea"];
 const WEB_MIN_SHARED = 2;     // sessions two artists must share to be linked
-const WEB_LINKS_PER_NODE = 3; // strongest links kept per artist (declutters the graph)
-const WEB_PAIR_STRIDE = 1e4;  // pair key = lo * stride + hi (artist idx < graph_artist_cap)
+const WEB_LINKS_PER_NODE = 3; // cap on links per artist, once each has its single strongest link
+const WEB_LABELS = 15;        // only the top N artists are labelled until highlighted
+const WEB_PAIR_STRIDE = 1e4;  // pair key = lo * stride + hi (artist idx < graph_artists.length)
 
 let webSim = null;
+let webFit = null;        // re-fits the current graph to the view (Reset view button)
+let webPinned = null;     // node whose details stay open after a click
+const webPos = new Map(); // last layout position by artist name, so re-renders don't reshuffle
 
 /** Co-listening links among the top `count` artists in the current date range. */
 function buildWebGraph(count) {
-  const cap = DATA.graph_artist_cap || 0;
-  const idxByName = new Map(DATA.artists.slice(0, cap).map((a, i) => [a.name, i]));
-  const top = rankArtists(state.fromDay, state.toDay)
+  const idxByName = new Map((DATA.graph_artists || []).map((name, i) => [name, i]));
+  const ranked = rankArtists(state.fromDay, state.toDay).slice(0, count);
+  const top = ranked
     .filter((a) => idxByName.has(a.name))
-    .slice(0, count)
-    .map((a) => ({ ...a, idx: idxByName.get(a.name) }));
+    .map((a, rank) => ({ ...a, rank, idx: idxByName.get(a.name), sess: 0 }));
   const nodeByIdx = new Map(top.map((n) => [n.idx, n]));
 
   const lo = dayStrToOff(state.fromDay),
     hi = dayStrToOff(state.toDay);
-  const sessCount = new Map();
   const pair = new Map();
   for (const [day, arts] of DATA.artist_sessions || []) {
     if (day < lo || day > hi) continue;
     const members = arts.filter((i) => nodeByIdx.has(i)); // arts is sorted ascending
-    for (const i of members) sessCount.set(i, (sessCount.get(i) || 0) + 1);
+    if (members.length < 2) continue;
+    for (const i of members) nodeByIdx.get(i).sess++;
     for (let a = 0; a < members.length; a++) {
       for (let b = a + 1; b < members.length; b++) {
         const k = members[a] * WEB_PAIR_STRIDE + members[b];
@@ -1388,81 +1392,100 @@ function buildWebGraph(count) {
   const cand = [];
   for (const [k, shared] of pair) {
     if (shared < WEB_MIN_SHARED) continue;
-    const s = Math.floor(k / WEB_PAIR_STRIDE),
-      t = k % WEB_PAIR_STRIDE;
-    cand.push({ s, t, shared, w: shared / Math.sqrt(sessCount.get(s) * sessCount.get(t)) });
+    const s = nodeByIdx.get(Math.floor(k / WEB_PAIR_STRIDE)),
+      t = nodeByIdx.get(k % WEB_PAIR_STRIDE);
+    cand.push({ source: s, target: t, shared, w: shared / Math.sqrt(s.sess * t.sess) });
   }
   cand.sort((x, y) => y.w - x.w);
-  const used = new Map();
+
+  // Every artist keeps its strongest link so nobody is orphaned; the rest are added
+  // strongest-first only while *both* ends are under the cap. (Letting either end
+  // qualify gave the artists everyone co-plays with 20+ links each.)
+  const deg = new Map();
+  const bump = (n) => deg.set(n, (deg.get(n) || 0) + 1);
   const links = [];
   for (const l of cand) {
-    if ((used.get(l.s) || 0) < WEB_LINKS_PER_NODE || (used.get(l.t) || 0) < WEB_LINKS_PER_NODE) {
-      used.set(l.s, (used.get(l.s) || 0) + 1);
-      used.set(l.t, (used.get(l.t) || 0) + 1);
-      links.push(l);
-    }
+    if (deg.has(l.source) && deg.has(l.target)) continue;
+    links.push(l);
+    bump(l.source);
+    bump(l.target);
   }
-
-  const linked = new Set(links.flatMap((l) => [l.s, l.t]));
-  const nodes = top.filter((n) => linked.has(n.idx));
-  const byIdx = new Map(nodes.map((n) => [n.idx, n]));
+  const kept = new Set(links);
+  for (const l of cand) {
+    if (kept.has(l) || deg.get(l.source) >= WEB_LINKS_PER_NODE || deg.get(l.target) >= WEB_LINKS_PER_NODE) continue;
+    links.push(l);
+    bump(l.source);
+    bump(l.target);
+  }
+  const nodes = top.filter((n) => deg.has(n));
 
   // Weighted label propagation to colour clusters.
-  const adj = new Map(nodes.map((n) => [n.idx, []]));
+  const adj = new Map(nodes.map((n) => [n, []]));
   for (const l of links) {
-    adj.get(l.s).push([l.t, l.w]);
-    adj.get(l.t).push([l.s, l.w]);
+    adj.get(l.source).push([l.target, l.w]);
+    adj.get(l.target).push([l.source, l.w]);
   }
-  const label = new Map(nodes.map((n) => [n.idx, n.idx]));
+  const label = new Map(nodes.map((n) => [n, n.rank]));
   for (let it = 0; it < 15; it++) {
     let changed = false;
     for (const n of nodes) {
       const tally = new Map();
-      for (const [o, w] of adj.get(n.idx)) tally.set(label.get(o), (tally.get(label.get(o)) || 0) + w);
-      let best = label.get(n.idx),
+      for (const [o, w] of adj.get(n)) tally.set(label.get(o), (tally.get(label.get(o)) || 0) + w);
+      let best = label.get(n),
         bw = -1;
       for (const [lab, w] of tally) if (w > bw || (w === bw && lab < best)) { best = lab; bw = w; }
-      if (best !== label.get(n.idx)) { label.set(n.idx, best); changed = true; }
+      if (best !== label.get(n)) { label.set(n, best); changed = true; }
     }
     if (!changed) break;
   }
-  const groupIds = [...new Set(nodes.map((n) => label.get(n.idx)))];
-  nodes.forEach((n) => (n.group = groupIds.indexOf(label.get(n.idx))));
+  // Groups ordered by total minutes; each is named after its top artist (nodes are in rank order).
+  const groupByLabel = new Map();
+  for (const n of nodes) {
+    const g = groupByLabel.get(label.get(n)) || { lead: n, size: 0, fm: 0 };
+    g.size++;
+    g.fm += n.fm;
+    groupByLabel.set(label.get(n), g);
+    n.group = g;
+  }
+  const groups = [...groupByLabel.values()].sort((a, b) => b.fm - a.fm);
+  groups.forEach((g, i) => (g.color = WEB_PALETTE[i % WEB_PALETTE.length]));
 
-  return {
-    nodes,
-    links: links.map((l) => ({ source: byIdx.get(l.s), target: byIdx.get(l.t), w: l.w, shared: l.shared })),
-    hidden: top.length - nodes.length,
-  };
+  return { nodes, links, groups, hidden: top.length - nodes.length, untracked: ranked.length - top.length };
 }
 
 function renderArtistWeb() {
   const host = document.getElementById("web-host");
   const hint = document.getElementById("web-hint");
   const tip = document.getElementById("web-tip");
+  const panel = document.getElementById("web-panel");
+  const legend = document.getElementById("web-legend");
   if (webSim) webSim.stop();
   host.innerHTML = "";
+  legend.innerHTML = "";
   tip.hidden = true;
+  panel.hidden = true;
+  webPinned = null;
+  webFit = null;
 
   if (typeof d3 === "undefined") {
     host.innerHTML = `<p class="web-empty">d3 failed to load, so the artist web is unavailable.</p>`;
     return;
   }
   const count = +document.getElementById("web-count").value || 40;
-  const { nodes, links, hidden } = buildWebGraph(count);
+  const { nodes, links, groups, hidden, untracked } = buildWebGraph(count);
   if (nodes.length < 2) {
     host.innerHTML = `<p class="web-empty">Not enough shared listening sessions in this range to link artists.</p>`;
     return;
   }
-  hint.textContent =
-    "Drag nodes · scroll to zoom · hover to highlight · click to open Artist dive" +
-    (hidden ? ` · ${hidden} unlinked artist${hidden > 1 ? "s" : ""} hidden` : "");
+  const notes = ["Drag · scroll to zoom · click an artist for details"];
+  if (hidden) notes.push(`${hidden} unlinked artist${hidden > 1 ? "s" : ""} hidden`);
+  if (untracked) notes.push(`${untracked} outside your all-time top ${DATA.graph_artists.length} not tracked`);
+  hint.textContent = notes.join(" · ");
 
   const W = host.clientWidth || 900;
   const H = Math.max(420, Math.min(680, Math.round(W * 0.62)));
   const maxMs = Math.max(...nodes.map((n) => n.fm));
   const radius = (n) => 9 + 24 * Math.sqrt(n.fm / maxMs);
-  const color = (n) => WEB_PALETTE[n.group % WEB_PALETTE.length];
 
   const svg = d3.select(host).append("svg")
     .attr("viewBox", `0 0 ${W} ${H}`).attr("width", "100%").attr("height", H)
@@ -1477,17 +1500,22 @@ function renderArtistWeb() {
   });
 
   const root = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.4, 4]).on("zoom", (e) => root.attr("transform", e.transform)));
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on("zoom", (e) => root.attr("transform", e.transform));
+  svg.call(zoom);
 
+  // Links inside a cluster take its colour; links between clusters stay neutral (CSS .cross).
   const wMax = Math.max(...links.map((l) => l.w));
   const link = root.append("g").attr("class", "web-links").selectAll("line").data(links).join("line")
+    .classed("cross", (l) => l.source.group !== l.target.group)
+    .attr("stroke", (l) => l.source.group.color)
     .attr("stroke-width", (l) => 1 + 5 * (l.w / wMax))
-    .attr("stroke-opacity", (l) => 0.18 + 0.5 * (l.w / wMax));
+    .attr("stroke-opacity", (l) => (l.source.group === l.target.group ? 0.3 + 0.45 * (l.w / wMax) : 0.15 + 0.3 * (l.w / wMax)));
 
-  const node = root.append("g").selectAll("g").data(nodes).join("g").attr("class", "web-node");
+  const node = root.append("g").selectAll("g").data(nodes).join("g").attr("class", "web-node")
+    .classed("labeled", (n) => n.rank < WEB_LABELS);
   node.append("circle").attr("r", radius)
-    .attr("fill", (n) => (n.image ? `url(#web-img-${n.idx})` : color(n)))
-    .attr("stroke", color).attr("stroke-width", 3);
+    .attr("fill", (n) => (n.image ? `url(#web-img-${n.idx})` : n.group.color))
+    .attr("stroke", (n) => n.group.color).attr("stroke-width", 3);
   node.filter((n) => !n.image).append("text").attr("class", "web-initial")
     .attr("text-anchor", "middle").attr("dy", "0.35em")
     .text((n) => (n.name.trim()[0] || "?").toUpperCase());
@@ -1500,39 +1528,61 @@ function renderArtistWeb() {
     nbrs.get(l.target).set(l.source, l);
   }
 
+  const highlight = (n) => {
+    const near = n && nbrs.get(n);
+    node.classed("dim", (o) => !!n && o !== n && !near.has(o))
+      .classed("near", (o) => !!n && (o === n || near.has(o)));
+    link.classed("dim", (l) => !!n && l.source !== n && l.target !== n)
+      .classed("hot", (l) => !!n && (l.source === n || l.target === n));
+  };
+  const infoHtml = (n) => {
+    const top5 = [...nbrs.get(n)].sort((a, b) => b[1].w - a[1].w).slice(0, 5);
+    return `<strong>${escHtml(n.name)}</strong><br>${listeningFriendlyPlain(n.fm / 60000)}` +
+      `<div class="web-sub">Played together, of its ${fmtNum(n.sess)} sessions with other top artists:</div>` +
+      `<ul>${top5.map(([o, l]) => `<li>${escHtml(o.name)} <span>${l.shared} (${Math.round((100 * l.shared) / n.sess)}%)</span></li>`).join("")}</ul>`;
+  };
+  const pin = (n) => {
+    webPinned = n;
+    tip.hidden = true;
+    highlight(n);
+    panel.hidden = !n;
+    if (n) panel.innerHTML = infoHtml(n) + `<button type="button" class="secondary" id="web-open">Open in Artist dive</button>`;
+  };
+
   node
     .on("mouseenter", (e, n) => {
-      const near = nbrs.get(n);
-      node.classed("dim", (o) => o !== n && !near.has(o));
-      link.classed("dim", (l) => l.source !== n && l.target !== n)
-        .classed("hot", (l) => l.source === n || l.target === n);
-      const top5 = [...near].sort((a, b) => b[1].w - a[1].w).slice(0, 5);
-      tip.innerHTML =
-        `<strong>${escHtml(n.name)}</strong><br>${listeningFriendlyPlain(n.fm / 60000)}` +
-        `<ul>${top5.map(([o, l]) => `<li>${escHtml(o.name)} <span>${l.shared} sessions</span></li>`).join("")}</ul>`;
+      if (webPinned) return;
+      highlight(n);
+      tip.innerHTML = infoHtml(n);
       tip.hidden = false;
     })
     .on("mousemove", (e) => {
-      const r = host.getBoundingClientRect();
-      tip.style.left = `${Math.min(e.clientX - r.left + 14, r.width - 210)}px`;
+      if (webPinned) return;
+      const r = tip.offsetParent.getBoundingClientRect();
+      tip.style.left = `${Math.min(e.clientX - r.left + 14, r.width - 230)}px`;
       tip.style.top = `${e.clientY - r.top + 14}px`;
     })
     .on("mouseleave", () => {
-      node.classed("dim", false);
-      link.classed("dim", false).classed("hot", false);
+      if (webPinned) return;
+      highlight(null);
       tip.hidden = true;
     })
     .on("click", (e, n) => {
-      document.getElementById("artist-input").value = n.name;
-      renderArtistChart();
-      document.getElementById("artist").scrollIntoView({ behavior: "smooth" });
+      e.stopPropagation();
+      pin(webPinned === n ? null : n);
     });
+  svg.on("click", () => pin(null));
 
   const tick = () => {
     link.attr("x1", (l) => l.source.x).attr("y1", (l) => l.source.y)
       .attr("x2", (l) => l.target.x).attr("y2", (l) => l.target.y);
     node.attr("transform", (n) => `translate(${n.x},${n.y})`);
   };
+  const savePos = () => nodes.forEach((n) => webPos.set(n.name, { x: n.x, y: n.y }));
+  for (const n of nodes) {
+    const p = webPos.get(n.name);
+    if (p) Object.assign(n, p);
+  }
   webSim = d3.forceSimulation(nodes)
     .force("link", d3.forceLink(links).distance((l) => 190 - 100 * (l.w / wMax)).strength((l) => 0.15 + 0.6 * (l.w / wMax)))
     .force("charge", d3.forceManyBody().strength(-520))
@@ -1540,20 +1590,47 @@ function renderArtistWeb() {
     .force("x", d3.forceX(W / 2).strength(0.04))
     .force("y", d3.forceY(H / 2).strength(0.06))
     .force("collide", d3.forceCollide((n) => radius(n) + 18))
-    .on("tick", tick);
-  if (prefersReducedMotion()) {
-    webSim.stop().tick(300);
-    tick();
-  }
+    .stop();
+  // Settle the layout up front rather than animating it in from a jumble.
+  webSim.tick(300);
+  tick();
+  savePos();
+  webSim.on("tick", tick).on("end", savePos);
+
+  webFit = (animate) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of nodes) {
+      const r = radius(n);
+      x0 = Math.min(x0, n.x - r - 30); // side room for labels
+      x1 = Math.max(x1, n.x + r + 30);
+      y0 = Math.min(y0, n.y - r);
+      y1 = Math.max(y1, n.y + r + 16);
+    }
+    const k = Math.min(1.5, 0.94 * Math.min(W / (x1 - x0), H / (y1 - y0)));
+    const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
+    (animate && !prefersReducedMotion() ? svg.transition().duration(400) : svg).call(zoom.transform, t);
+  };
+  webFit(false);
 
   node.call(d3.drag()
     .on("start", (e, n) => { if (!e.active) webSim.alphaTarget(0.25).restart(); n.fx = n.x; n.fy = n.y; })
     .on("drag", (e, n) => { n.fx = e.x; n.fy = e.y; })
     .on("end", (e, n) => { if (!e.active) webSim.alphaTarget(0); n.fx = n.fy = null; }));
+
+  legend.innerHTML = groups.slice(0, WEB_PALETTE.length).map((g) =>
+    `<span><i style="background:${g.color}"></i>${escHtml(g.lead.name)}${g.size > 1 ? ` &amp; ${g.size - 1} more` : ""}</span>`
+  ).join("");
 }
 
 function wireWebControls() {
   document.getElementById("web-count").addEventListener("change", renderArtistWeb);
+  document.getElementById("web-reset").addEventListener("click", () => webFit && webFit(true));
+  document.getElementById("web-panel").addEventListener("click", (e) => {
+    if (!e.target.closest("#web-open") || !webPinned) return;
+    document.getElementById("artist-input").value = webPinned.name;
+    renderArtistChart();
+    document.getElementById("artist").scrollIntoView({ behavior: "smooth" });
+  });
   let timer = 0,
     lastW = 0;
   window.addEventListener("resize", () => {

@@ -35,6 +35,9 @@ SEARCH_URL = "https://api.spotify.com/v1/search"
 # need images, but we fetch a little extra headroom so the cache stays warm
 # if the top-3 shuffle between refreshes.
 TOP_N = 12
+# Artists also appear as photo nodes in the Artist web (up to its "Top 80"
+# setting) and as line-end icons in the Top listens race.
+ARTIST_TOP_N = 80
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ def _top_entities_needing_art(
 
     top_track_keys = sorted(track_ms.keys(), key=lambda k: -track_ms[k])[:TOP_N]
     top_album_keys = sorted(album_ms.keys(), key=lambda k: -album_ms[k])[:TOP_N]
-    top_artist_names = sorted(artist_ms.keys(), key=lambda a: -artist_ms[a])[:TOP_N]
+    top_artist_names = sorted(artist_ms.keys(), key=lambda a: -artist_ms[a])[:ARTIST_TOP_N]
 
     need_tracks = {k: track_display[k] for k in top_track_keys if f"track:{k}" not in cache}
     need_albums = {k: album_display[k] for k in top_album_keys if f"album:{k}" not in cache}

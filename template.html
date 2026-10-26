@@ -164,9 +164,14 @@
           <option value="60">Top 60</option>
           <option value="80">Top 80</option>
         </select>
-        <span class="web-hint" id="web-hint">Drag nodes · scroll to zoom · hover to highlight</span>
+        <button type="button" class="secondary" id="web-reset">Reset view</button>
+        <span class="web-hint" id="web-hint">Drag · scroll to zoom · click an artist for details</span>
       </div>
-      <div class="web-host" id="web-host"></div>
+      <div class="web-stage">
+        <div class="web-host" id="web-host"></div>
+        <div class="web-panel" id="web-panel" hidden></div>
+      </div>
+      <div class="web-legend" id="web-legend"></div>
       <div class="web-tip" id="web-tip" hidden></div>
     </div>
     </section>
