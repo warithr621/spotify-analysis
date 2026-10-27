@@ -1466,7 +1466,7 @@ function renderArtistWeb() {
     tip.hidden = true;
     highlight(n);
     panel.hidden = !n;
-    if (n) panel.innerHTML = infoHtml(n) + `<button type="button" class="secondary" id="web-open">Open in Artist dive</button>`;
+    if (n) panel.innerHTML = infoHtml(n) + `<button type="button" class="secondary" id="web-open">Open in Artist Dive</button>`;
   };
 
   node
