@@ -1373,6 +1373,17 @@ function renderRiver() {
 
   const svg = d3.select(host).append("svg").attr("width", W).attr("height", H)
     .attr("role", "img").attr("aria-label", "Streamgraph of your top Last.fm tags over time");
+
+  // A vertical line at every January 1st, behind the streams (like the race's date lines).
+  const years = [];
+  for (let o = 0; o < span; o++) {
+    if (!offToDayStr(lo + o).endsWith("-01-01")) continue;
+    const pos = monthly ? bIdx[o] - b0 : o / 7 - b0;
+    if (pos > 0 && pos < nb - 1) years.push(pos);
+  }
+  svg.append("g").selectAll("line").data(years).join("line")
+    .attr("class", "river-year").attr("x1", (p) => x(p)).attr("x2", (p) => x(p)).attr("y1", m.t).attr("y2", H - m.b);
+
   const layers = svg.append("g").selectAll("path").data(series).join("path")
     .attr("class", "river-layer").attr("fill", (s) => color(s.key)).attr("d", area);
 

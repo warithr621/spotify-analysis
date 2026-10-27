@@ -736,6 +736,7 @@ footer {
 .river-layer.dim { opacity: 0.25; }
 .river-label { fill: var(--text); font-weight: 700; pointer-events: none; paint-order: stroke; stroke: rgba(255, 255, 255, 0.85); stroke-width: 3px; }
 .river-axis { fill: var(--muted); font: 11px var(--font-body); }
+.river-year { stroke: var(--border); stroke-width: 1; }
 .river-note { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
 #race-scrub { width: 100%; margin: 0.7rem 0 0.3rem; accent-color: var(--accent-fuchsia); }
 .race-ticks { display: flex; justify-content: space-between; margin: 0 0.3rem 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
