@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import glob
+import importlib
 import json
 import logging
 import os
 import queue
+import socket
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,13 +88,22 @@ def release_file_lock() -> None:
 
 def newest_source_mtime() -> float:
     mtimes: list[float] = []
-    for pattern in ("Streaming_History_Audio_*.json",):
-        for fp in glob.glob(str(BASE / "music-history" / pattern)):
-            try:
-                mtimes.append(Path(fp).stat().st_mtime)
-            except OSError:
-                continue
+    paths = list(glob.glob(str(BASE / "music-history" / "Streaming_History_Audio_*.json")))
+    # The bundle also depends on the build code and the art/Last.fm caches.
+    paths += [str(BASE / n) for n in ("build_dashboard.py", "art_cache.json", "lastfm_cache.json")]
+    for fp in paths:
+        try:
+            mtimes.append(Path(fp).stat().st_mtime)
+        except OSError:
+            continue
     return max(mtimes) if mtimes else 0.0
+
+
+def rebuild_dashboard() -> None:
+    """Rebuild dashboard.html with the *current* build_dashboard.py. The module is
+    reloaded first so a long-running server never rebuilds with stale code."""
+    importlib.reload(build_dashboard)
+    build_dashboard.main()
 
 
 def maybe_rebuild_dashboard() -> None:
@@ -107,7 +119,7 @@ def maybe_rebuild_dashboard() -> None:
         out_m = 0.0
     if not OUT_HTML.is_file() or out_m < src_m or out_m < tmpl_m:
         logger.info("Regenerating dashboard.html")
-        build_dashboard.main()
+        rebuild_dashboard()
 
 
 def write_last_status(payload: dict) -> None:
@@ -188,7 +200,7 @@ def api_pull():
             pulled = cloud_pull.pull_live()
 
         try:
-            build_dashboard.main()
+            rebuild_dashboard()
         except Exception as e:
             logger.exception("Dashboard rebuild failed")
             return jsonify(ok=False, message=f"Rebuild failed: {e}"), 500
@@ -263,7 +275,7 @@ def api_refresh():
             logger.exception("Art cache refresh crashed (non-fatal)")
 
         try:
-            build_dashboard.main()
+            rebuild_dashboard()
         except Exception as e:
             logger.exception("Dashboard rebuild failed")
             payload = {"ok": False, "message": f"Rebuild failed: {e}", "new_rows": added}
@@ -328,7 +340,22 @@ def api_authorize():
         refresh_thread_lock.release()
 
 
+def port_in_use() -> bool:
+    """True if something already accepts connections on HOST:PORT. Werkzeug sets
+    SO_REUSEADDR, which on Windows lets a second server bind the same port, so
+    duplicates would otherwise share requests (and overwrite dashboard.html with old code)."""
+    probe = "127.0.0.1" if HOST in ("0.0.0.0", "") else HOST
+    try:
+        with socket.create_connection((probe, PORT), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def main() -> None:
+    if port_in_use():
+        logger.error("Another server is already running on %s:%s. Stop it first (or set REFRESH_PORT).", HOST, PORT)
+        sys.exit(1)
     maybe_rebuild_dashboard()
     logger.info("Open http://%s:%s/", HOST, PORT)
     app.run(host=HOST, port=PORT, debug=False, threaded=True)
