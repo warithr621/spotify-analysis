@@ -727,6 +727,20 @@ footer {
 .race-host { position: relative; width: 100%; height: clamp(360px, 52vw, 620px); border: 1px solid var(--border-soft); border-radius: var(--radius); overflow: hidden; background: var(--card-hover); }
 .race-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* Daily heatmap */
+.heat-summary { margin: -0.4rem 0 0.8rem; font-size: 0.85rem; color: var(--text-soft); }
+.heat-wrap { position: relative; }
+.heat-host { overflow-x: auto; padding-bottom: 0.3rem; }
+.heat-host svg { display: block; }
+.heat-nav { display: flex; align-items: center; gap: 0.5rem; }
+.heat-nav button { padding: 0.2rem 0.65rem; font-size: 1.1rem; line-height: 1.2; }
+.heat-nav span { min-width: 3.2em; text-align: center; font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.heat-lbl { fill: var(--muted); font: 10px var(--font-body); }
+.heat-cell.in:hover { stroke: var(--text); stroke-width: 1.5; }
+.heat-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; margin-top: 0.6rem; font-size: 0.75rem; color: var(--muted); }
+.heat-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.heat-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+
 /* Taste River */
 .river-wrap { position: relative; }
 .river-host { position: relative; width: 100%; height: clamp(320px, 40vw, 480px); border: 1px solid var(--border-soft); border-radius: var(--radius); overflow: hidden; background: var(--card-hover); }

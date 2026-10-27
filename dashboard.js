@@ -282,6 +282,7 @@ function renderCharts() {
   renderArtistChart();
   renderRace();
   renderRiver();
+  renderHeatmap();
   renderArtistWeb();
 }
 
@@ -532,6 +533,7 @@ function bootstrap(){
   wireInteractions();
   wireRaceControls();
   wireRiver();
+  wireHeatmap();
   wireWebControls();
   document.getElementById('artist-input').addEventListener('change', renderArtistChart);
   document.getElementById('artist-input').addEventListener('keyup', renderArtistChart);
@@ -1269,6 +1271,156 @@ function wireRaceControls() {
       }
     }).observe(host);
   }
+}
+
+/* ---------- Daily heatmap (SVG calendar) ----------
+ * One year at a time (‹ year › arrows), one cell per day, shaded linearly by minutes
+ * from 0 up to that year's busiest day. */
+
+// Days with no listening are neutral grey, clearly apart from the lightest listening shade.
+const HEAT_EMPTY = "#eceaef";
+const HEAT_OUTSIDE = "#f6f2fa"; // days outside the date range
+const HEAT_STOPS = [
+  [0.0, [226, 196, 250]],
+  [0.5, [192, 38, 211]],
+  [1.0, [74, 15, 122]],
+];
+
+let heatYear = null; // year on screen; reset to the latest year when it falls outside the date range
+let heatTop = null;  // day offset -> [top artist, minutes], built on first hover
+
+function heatColor(f) {
+  for (let i = 1; i < HEAT_STOPS.length; i++) {
+    const [f1, c1] = HEAT_STOPS[i];
+    if (f <= f1) {
+      const [f0, c0] = HEAT_STOPS[i - 1];
+      const u = (f - f0) / (f1 - f0);
+      return `rgb(${c0.map((v, k) => Math.round(v + (c1[k] - v) * u)).join(",")})`;
+    }
+  }
+  return `rgb(${HEAT_STOPS[HEAT_STOPS.length - 1][1].join(",")})`;
+}
+
+const fmtHeatDate = (iso, year = true) =>
+  new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, {
+    timeZone: "UTC", weekday: "short", month: "short", day: "numeric", ...(year ? { year: "numeric" } : {}),
+  });
+const fmtMinutes = (m) => `${fmtNum(m)} min`;
+
+/** Most-listened artist per day, from every artist's per-day rows. */
+function heatTopArtists() {
+  if (heatTop) return heatTop;
+  heatTop = new Map();
+  for (const a of DATA.artists) {
+    for (const [d, ms] of a.days) {
+      const cur = heatTop.get(d);
+      if (!cur || ms > cur[1]) heatTop.set(d, [a.name, ms]);
+    }
+  }
+  return heatTop;
+}
+
+function renderHeatmap() {
+  const host = document.getElementById("heat-host");
+  const lo = dayStrToOff(state.fromDay),
+    hi = dayStrToOff(state.toDay);
+  const yMin = +state.fromDay.slice(0, 4),
+    yMax = +state.toDay.slice(0, 4);
+  if (heatYear == null || heatYear < yMin || heatYear > yMax) heatYear = yMax;
+  const y = heatYear;
+  document.getElementById("heat-year").textContent = y;
+  document.getElementById("heat-prev").disabled = y <= yMin;
+  document.getElementById("heat-next").disabled = y >= yMax;
+
+  const byDay = new Map();
+  for (const row of DATA.series.day) byDay.set(dayOffFromSeriesRow(row), row.ms / 60000);
+
+  // Stats for the days of this year that are inside the date range.
+  const jan1 = Date.UTC(y, 0, 1);
+  const days = (Date.UTC(y + 1, 0, 1) - jan1) / 864e5;
+  const off0 = dayStrToOff(`${y}-01-01`);
+  const first = Math.max(lo, off0),
+    last = Math.min(hi, off0 + days - 1);
+  let total = 0,
+    active = 0,
+    busiest = { off: -1, v: 0 };
+  for (let off = first; off <= last; off++) {
+    const v = byDay.get(off) || 0;
+    total += v;
+    if (v > 0) active++;
+    if (v > busiest.v) busiest = { off, v };
+  }
+  const max = busiest.v || 1;
+  document.getElementById("heat-summary").innerHTML = active
+    ? `<strong>${fmtMinutes(total)}</strong> · <strong>${fmtNum(active)}</strong> of ${fmtNum(last - first + 1)} days with listening` +
+      ` · busiest <strong>${fmtHeatDate(offToDayStr(busiest.off), false)}</strong> (${fmtMinutes(busiest.v)})`
+    : `No listening in ${y} in this range.`;
+
+  const W = host.clientWidth || 900;
+  const left = 34,
+    gap = 2;
+  const cell = Math.max(8, Math.min(18, Math.floor((W - left - 6) / 53) - gap));
+  const step = cell + gap;
+  const top = 16;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const wd0 = new Date(jan1).getUTCDay(); // 0 = Sunday
+  const parts = [];
+  for (let m = 0; m < 12; m++) {
+    const doy = (Date.UTC(y, m, 1) - jan1) / 864e5;
+    parts.push(`<text class="heat-lbl" x="${left + Math.floor((doy + wd0) / 7) * step}" y="10">${months[m]}</text>`);
+  }
+  [1, 3, 5].forEach((r) =>
+    parts.push(`<text class="heat-lbl" x="${left - 6}" y="${top + r * step + cell - 2}" text-anchor="end">${["Mon", "Wed", "Fri"][(r - 1) / 2]}</text>`)
+  );
+  for (let d = 0; d < days; d++) {
+    const dt = new Date(jan1 + d * 864e5);
+    const iso = dt.toISOString().slice(0, 10);
+    const off = off0 + d;
+    const x = left + Math.floor((d + wd0) / 7) * step,
+      yy = top + dt.getUTCDay() * step;
+    const inside = off >= lo && off <= hi;
+    const v = byDay.get(off) || 0;
+    const fill = !inside ? HEAT_OUTSIDE : v > 0 ? heatColor(v / max) : HEAT_EMPTY;
+    parts.push(
+      `<rect class="heat-cell${inside ? " in" : ""}" x="${x}" y="${yy}" width="${cell}" height="${cell}" rx="2" fill="${fill}"` +
+        (inside ? ` data-d="${iso}" data-o="${off}" data-v="${v}"` : ' opacity="0.5"') + `/>`
+    );
+  }
+  host.innerHTML = `<svg width="${left + 53 * step + 4}" height="${top + 7 * step}" role="img" aria-label="Calendar heatmap of daily listening in ${y}">${parts.join("")}</svg>`;
+
+  // Linear legend from 0 to this year's busiest day.
+  document.getElementById("heat-legend").innerHTML = [0, 0.25, 0.5, 0.75, 1]
+    .map((f) => `<span><i style="background:${f === 0 ? HEAT_EMPTY : heatColor(f)}"></i>${fmtNum(f * max)}</span>`)
+    .join("") + `<span>min</span>`;
+}
+
+function wireHeatmap() {
+  const host = document.getElementById("heat-host");
+  const tip = document.getElementById("heat-tip");
+  const wrap = host.parentElement;
+  host.addEventListener("mousemove", (e) => {
+    const c = e.target.closest(".heat-cell.in");
+    if (!c) return void (tip.hidden = true);
+    const v = +c.dataset.v;
+    const topA = v > 0 && heatTopArtists().get(+c.dataset.o);
+    tip.innerHTML = `<strong>${fmtHeatDate(c.dataset.d)}</strong><br>${fmtMinutes(v)}` +
+      (topA ? `<br>Top artist: ${escHtml(topA[0])} (${fmtMinutes(topA[1] / 60000)})` : "");
+    tip.hidden = false;
+    const r = wrap.getBoundingClientRect();
+    placeTip(tip, e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+  });
+  host.addEventListener("mouseleave", () => (tip.hidden = true));
+  document.getElementById("heat-prev").addEventListener("click", () => { heatYear--; renderHeatmap(); });
+  document.getElementById("heat-next").addEventListener("click", () => { heatYear++; renderHeatmap(); });
+  let timer = 0,
+    lastW = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const w = host.clientWidth;
+      if (w && w !== lastW) { lastW = w; renderHeatmap(); }
+    }, 200);
+  });
 }
 
 /* ---------- Taste River (d3 streamgraph of genres from Last.fm tags) ---------- */

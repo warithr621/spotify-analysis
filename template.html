@@ -19,6 +19,7 @@
         <span class="toc-label">Jump to...</span>
         <a href="#snapshot">Snapshot</a>
         <a href="#trends">Trends</a>
+        <a href="#heatmap">Heatmap</a>
         <a href="#artist">Artist Dive</a>
         <a href="#artist-web">Artist Web</a>
         <a href="#recent-plays">Recent Plays</a>
@@ -134,6 +135,29 @@
         </div>
         <p class="river-note">The width of a stream is how much you listened to a genre. Each artist you listen to counts towards one genre according to their Last.fm tags.</p>
       </div>
+    </div>
+    </section>
+
+    <section id="heatmap" class="anchor-section">
+    <div class="section-title">
+      <h2>Daily Heatmap</h2>
+      <span>Every day of your listening at a glance</span>
+    </div>
+    <div class="chart-card chart-card--full">
+      <div class="race-head">
+        <h3>Minutes per Day</h3>
+        <div class="heat-nav">
+          <button type="button" class="secondary" id="heat-prev" aria-label="Previous year">‹</button>
+          <span id="heat-year" aria-live="polite"></span>
+          <button type="button" class="secondary" id="heat-next" aria-label="Next year">›</button>
+        </div>
+      </div>
+      <p class="heat-summary" id="heat-summary"></p>
+      <div class="heat-wrap">
+        <div class="heat-host" id="heat-host"></div>
+        <div class="web-tip" id="heat-tip" hidden></div>
+      </div>
+      <div class="heat-legend" id="heat-legend"></div>
     </div>
     </section>
 
