@@ -726,7 +726,6 @@ const RACE_FADE_DAYS = 4; // lines ease in/out over this many days around enteri
 // Candidates considered per kind (top by total minutes); tracks need a deeper pool
 // because a track can top a 30-day window without ranking high all-time.
 const RACE_POOL = { artists: 400, albums: 700, tracks: 1500 };
-const RACE_KIND_LABEL = { artists: "artists", albums: "albums", tracks: "tracks" };
 
 const race = {
   data: null,
@@ -862,7 +861,7 @@ function buildRaceData() {
     if (i >= 0 && i < first) first = i;
   }
   const start = Math.max(0, first - RACE_LEAD_DAYS);
-  return { N, lo, start, artists, maxes, top, trail, kind: race.kind, scales: null, scalesWin: 0 };
+  return { N, lo, start, artists, maxes, scales: null, scalesWin: 0 };
 }
 
 const raceImgs = new Map();
@@ -939,15 +938,14 @@ function drawRace() {
   }
 
   const { N, lo, artists } = data;
-  const win = race.win || Math.max(1, N - data.start), // 0 = whole range
-    interval = win / 4;
+  const win = race.win || Math.max(1, N - data.start); // 0 = whole range
   const t = Math.min(Math.max(race.t, data.start), N - 1);
   const d = Math.floor(t),
     frac = t - d;
   const fs = Math.max(11, Math.min(16, w / 62));
   const x0 = Math.min(64, w * 0.09),
     x1 = w - Math.min(300, w * 0.3); // room for "Title · Artist" labels
-  const yTop = Math.max(70, h * 0.17),
+  const yTop = Math.max(66, h * 0.15),
     yBot = h - 34;
   const pw = x1 - x0,
     ph = yBot - yTop;
@@ -985,15 +983,15 @@ function drawRace() {
   unitLines(raceUnit(i0), 1 - r);
   unitLines(raceUnit(i0 + 1), r);
 
-  // Vertical date lines that scroll with the data.
+  // Vertical date lines on calendar boundaries that scroll with the data: every month for
+  // short views, every quarter for about a year, every January beyond that.
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "center";
-  const shortDate = (off) => {
-    const iso = offToDayStr(off);
-    return `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(2, 4)}`;
-  };
-  for (let j = Math.ceil(t - win); j <= Math.floor(t); j++) {
-    if (j < 0 || (lo + j) % Math.round(interval) !== 0) continue;
+  const everyMonths = win <= 120 ? 1 : win <= 420 ? 3 : 12;
+  const monthFmt = new Intl.DateTimeFormat(undefined, { timeZone: "UTC", month: "short", year: "numeric" });
+  for (let j = Math.max(0, Math.ceil(t - win)); j <= d; j++) {
+    const iso = offToDayStr(lo + j);
+    if (iso.slice(8, 10) !== "01" || (+iso.slice(5, 7) - 1) % everyMonths) continue;
     const x = xOf(j);
     if (x < x0 + 2) continue;
     ctx.strokeStyle = c.grid;
@@ -1002,7 +1000,7 @@ function drawRace() {
     ctx.lineTo(x, yBot);
     ctx.stroke();
     ctx.fillStyle = c.muted;
-    ctx.fillText(shortDate(lo + j), x, yBot + fs + 6);
+    ctx.fillText(everyMonths === 12 ? iso.slice(0, 4) : monthFmt.format(new Date(iso + "T00:00:00Z")), x, yBot + fs + 6);
   }
 
   // Lines (clipped on the left so they slide under the y-axis).
@@ -1119,7 +1117,7 @@ function drawRace() {
     ctx.globalAlpha = 1;
   }
 
-  // Axes + title + big date.
+  // Axes + big date (the controls above already say what is ranked and over what window).
   ctx.strokeStyle = c.muted;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -1128,23 +1126,16 @@ function drawRace() {
   ctx.lineTo(x1 + 8, yBot);
   ctx.stroke();
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = c.muted;
-  ctx.font = `${fs + 1}px Inter, system-ui, sans-serif`;
-  ctx.fillText(
-    `Top ${data.top} ${data.top === 1 ? RACE_KIND_LABEL[data.kind].slice(0, -1) : RACE_KIND_LABEL[data.kind]} · ` +
-      (data.trail ? `minutes listened in the trailing ${data.trail} days` : "total minutes listened (all time)"),
-    x0 + 6,
-    26
-  );
+  ctx.textAlign = "left";
   ctx.fillStyle = c.text;
-  ctx.font = `600 ${Math.max(24, Math.min(46, w / 24))}px Fraunces, Georgia, serif`;
+  ctx.font = `600 ${Math.max(22, Math.min(40, w / 26))}px Fraunces, Georgia, serif`;
   const dateStr = new Date(offToDayStr(lo + d) + "T00:00:00Z").toLocaleDateString(undefined, {
     timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
   });
-  ctx.fillText(dateStr, x0 + 6, 26 + Math.max(24, Math.min(46, w / 24)) + 4);
+  ctx.fillText(dateStr, x0 + 6, yTop - 16);
 }
 
 function raceSyncControls() {
