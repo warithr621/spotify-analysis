@@ -281,6 +281,7 @@ function renderCharts() {
   hydrateArtistExplorer();
   renderArtistChart();
   renderRace();
+  renderRiver();
   renderArtistWeb();
 }
 
@@ -530,6 +531,7 @@ function bootstrap(){
   renderKpis({ fromDay: state.fromDay, toDay: state.toDay });
   wireInteractions();
   wireRaceControls();
+  wireRiver();
   wireWebControls();
   document.getElementById('artist-input').addEventListener('change', renderArtistChart);
   document.getElementById('artist-input').addEventListener('keyup', renderArtistChart);
@@ -1267,6 +1269,174 @@ function wireRaceControls() {
       }
     }).observe(host);
   }
+}
+
+/* ---------- Taste River (d3 streamgraph of Last.fm tags) ---------- */
+
+let riverCount = 12;
+
+/** Place a tooltip near (x, y) inside a w x h box, flipping or clamping so it is never cut off. */
+function placeTip(tip, x, y, w, h) {
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let left = x + 14, top = y + 14;
+  if (left + tw > w - 4) left = x - tw - 14;
+  if (top + th > h - 4) top = y - th - 14;
+  tip.style.left = `${Math.max(4, Math.min(left, w - tw - 4))}px`;
+  tip.style.top = `${Math.max(4, Math.min(top, h - th - 4))}px`;
+}
+
+const fmtMonth = (ym) =>
+  new Date(ym + "-01T00:00:00Z").toLocaleDateString(undefined, { timeZone: "UTC", month: "short", year: "numeric" });
+
+function renderRiver() {
+  const card = document.getElementById("river-card");
+  card.hidden = !(DATA.artists.some((a) => a.tags && a.tags.length) && typeof d3 !== "undefined");
+  if (card.hidden) return;
+  const host = document.getElementById("river-host");
+  const tip = document.getElementById("river-tip");
+  tip.hidden = true;
+  host.innerHTML = "";
+
+  const lo = dayStrToOff(state.fromDay),
+    hi = dayStrToOff(state.toDay);
+  const span = hi - lo + 1;
+  if (span < 14) {
+    host.innerHTML = `<p class="web-empty">Pick a range of at least two weeks to draw the river.</p>`;
+    return;
+  }
+
+  // Monthly buckets for long ranges, weekly for short ones.
+  const monthly = span > 240;
+  const bIdx = new Int32Array(span);
+  const labels = [];
+  if (monthly) {
+    const base = (() => { const s = offToDayStr(lo); return +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1); })();
+    for (let o = 0; o < span; o++) {
+      const s = offToDayStr(lo + o);
+      const b = +s.slice(0, 4) * 12 + (+s.slice(5, 7) - 1) - base;
+      bIdx[o] = b;
+      labels[b] = s.slice(0, 7);
+    }
+  } else {
+    for (let o = 0; o < span; o++) {
+      bIdx[o] = Math.floor(o / 7);
+      labels[bIdx[o]] = offToDayStr(lo + bIdx[o] * 7);
+    }
+  }
+  const B = labels.length;
+
+  // Minutes per tag per bucket.
+  const byTag = new Map();
+  for (const a of DATA.artists) {
+    if (!a.tags || !a.tags.length) continue;
+    for (const row of a.days) {
+      if (row[0] < lo || row[0] > hi) continue;
+      const b = bIdx[row[0] - lo];
+      for (const tg of a.tags) {
+        let arr = byTag.get(tg);
+        if (!arr) byTag.set(tg, (arr = new Float64Array(B)));
+        arr[b] += row[1] / 60000;
+      }
+    }
+  }
+  const keys = [...byTag]
+    .map(([tg, arr]) => [tg, arr.reduce((s, v) => s + v, 0)])
+    .sort((x, y) => y[1] - x[1])
+    .slice(0, riverCount)
+    .map(([tg]) => tg);
+  if (!keys.length) {
+    host.innerHTML = `<p class="web-empty">No tagged listening in this range.</p>`;
+    return;
+  }
+  // Drop half-finished buckets at either end; they would pinch the stream to a point.
+  const dayCount = new Int32Array(B);
+  for (let o = 0; o < span; o++) dayCount[bIdx[o]]++;
+  const minDays = monthly ? 10 : 4;
+  let b0 = 0,
+    b1 = B - 1;
+  while (b0 < b1 - 3 && dayCount[b0] < minDays) b0++;
+  while (b1 > b0 + 3 && dayCount[b1] < minDays) b1--;
+  const nb = b1 - b0 + 1;
+  const rows = Array.from({ length: nb }, (_, b) => Object.fromEntries(keys.map((k) => [k, byTag.get(k)[b + b0]])));
+  const series = d3.stack().keys(keys).order(d3.stackOrderInsideOut).offset(d3.stackOffsetWiggle)(rows);
+
+  const W = host.clientWidth || 900,
+    H = host.clientHeight || 400;
+  const m = { l: 16, r: 16, t: 14, b: 30 };
+  const x = d3.scaleLinear([0, nb - 1], [m.l, W - m.r]);
+  const y = d3.scaleLinear(
+    [d3.min(series, (s) => d3.min(s, (d) => d[0])), d3.max(series, (s) => d3.max(s, (d) => d[1]))],
+    [H - m.b, m.t]
+  );
+  const area = d3.area().x((_, i) => x(i)).y0((d) => y(d[0])).y1((d) => y(d[1])).curve(d3.curveBasis);
+  const color = (k) => `hsl(${(keys.indexOf(k) * 137.508) % 360} 70% 62%)`;
+
+  const svg = d3.select(host).append("svg").attr("width", W).attr("height", H)
+    .attr("role", "img").attr("aria-label", "Streamgraph of your top Last.fm tags over time");
+  const layers = svg.append("g").selectAll("path").data(series).join("path")
+    .attr("class", "river-layer").attr("fill", (s) => color(s.key)).attr("d", area);
+
+  // Name each stream where it is thickest, if it is thick enough to hold text.
+  const fs = Math.max(10, Math.min(13, W / 80));
+  svg.append("g").selectAll("text").data(series).join("text")
+    .attr("class", "river-label").style("font-size", `${fs}px`)
+    .each(function (s) {
+      let bi = 0, bt = -1;
+      s.forEach((d, i) => { const t = d[1] - d[0]; if (t > bt) { bt = t; bi = i; } });
+      const px = Math.abs(y(s[bi][0]) - y(s[bi][1]));
+      if (px < fs + 6) return d3.select(this).remove();
+      const cx = Math.min(W - m.r - 40, Math.max(m.l + 40, x(bi)));
+      d3.select(this).attr("x", cx).attr("y", (y(s[bi][0]) + y(s[bi][1])) / 2).attr("dy", "0.35em").attr("text-anchor", "middle").text(s.key);
+    });
+
+  // Time axis: a label at each January (every other year when there are many), else evenly spaced.
+  let ticks = monthly ? d3.range(nb).filter((i) => labels[i + b0].endsWith("-01")) : [];
+  if (ticks.length > 9) ticks = ticks.filter((_, j) => j % 2 === 0);
+  const tickText = (i) => (monthly && ticks.length ? labels[i + b0].slice(0, 4) : monthly
+    ? fmtMonth(labels[i + b0])
+    : labels[i + b0].slice(5));
+  if (!ticks.length) ticks = d3.range(0, nb, Math.max(1, Math.round(nb / 6)));
+  svg.append("g").selectAll("text").data(ticks).join("text")
+    .attr("class", "river-axis").attr("x", (i) => x(i)).attr("y", H - 10).attr("text-anchor", "middle")
+    .text(tickText);
+
+  layers
+    .on("mouseenter", function (e, s) {
+      layers.classed("dim", (o) => o !== s);
+    })
+    .on("mousemove", function (e, s) {
+      const r = host.getBoundingClientRect();
+      const i = Math.max(0, Math.min(nb - 1, Math.round(x.invert(e.clientX - r.left))));
+      const v = byTag.get(s.key)[i + b0];
+      const when = monthly ? fmtMonth(labels[i + b0]) : "Week of " + labels[i + b0];
+      tip.innerHTML = `<strong>${escHtml(s.key)}</strong><br>${when}<br>${listeningFriendlyPlain(v)}`;
+      tip.hidden = false;
+      placeTip(tip, e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+    })
+    .on("mouseleave", () => {
+      layers.classed("dim", false);
+      tip.hidden = true;
+    });
+}
+
+function wireRiver() {
+  const seg = document.getElementById("river-count");
+  seg.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-v]");
+    if (!btn) return;
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    riverCount = +btn.dataset.v;
+    renderRiver();
+  });
+  let timer = 0,
+    lastW = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const w = document.getElementById("river-host").clientWidth;
+      if (w && w !== lastW) { lastW = w; renderRiver(); }
+    }, 200);
+  });
 }
 
 /* ---------- Artist web (d3 force graph) ---------- */

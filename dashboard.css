@@ -727,5 +727,15 @@ footer {
 .web-controls select { width: auto; }
 .race-host { position: relative; width: 100%; height: clamp(360px, 52vw, 620px); border: 1px solid var(--border-soft); border-radius: var(--radius); overflow: hidden; background: var(--card-hover); }
 .race-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Taste River */
+.river-wrap { position: relative; }
+.river-host { position: relative; width: 100%; height: clamp(320px, 40vw, 480px); border: 1px solid var(--border-soft); border-radius: var(--radius); overflow: hidden; background: var(--card-hover); }
+.river-host svg { display: block; }
+.river-layer { stroke: rgba(255, 255, 255, 0.7); stroke-width: 0.6; transition: opacity 0.15s; }
+.river-layer.dim { opacity: 0.25; }
+.river-label { fill: var(--text); font-weight: 700; pointer-events: none; paint-order: stroke; stroke: rgba(255, 255, 255, 0.85); stroke-width: 3px; }
+.river-axis { fill: var(--muted); font: 11px var(--font-body); }
+.river-note { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
 #race-scrub { width: 100%; margin: 0.7rem 0 0.3rem; accent-color: var(--accent-fuchsia); }
 .race-ticks { display: flex; justify-content: space-between; margin: 0 0.3rem 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
