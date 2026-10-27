@@ -722,6 +722,7 @@ const prefersReducedMotion = () =>
 const RACE_TOP = 10;
 const RACE_LEAD_DAYS = 3; // empty days kept before the first listen when auto-trimming the start
 const RACE_PLAY_SECONDS = 22; // playback length for the whole range, whatever its span
+const RACE_FADE_DAYS = 4; // lines ease in/out over this many days around entering/leaving the top list
 // Candidates considered per kind (top by total minutes); tracks need a deeper pool
 // because a track can top a 30-day window without ranking high all-time.
 const RACE_POOL = { artists: 400, albums: 700, tracks: 1500 };
@@ -843,6 +844,17 @@ function buildRaceData() {
   }
 
   const artists = pool.filter((a) => a.shown.includes(1));
+  // Opacity = share of the last RACE_FADE_DAYS days spent in the top list, so a line eases in
+  // when it enters and fades out after it drops off instead of popping.
+  for (const a of artists) {
+    a.alpha = new Float32Array(N);
+    let inTop = 0;
+    for (let k = 0; k < N; k++) {
+      inTop += a.shown[k];
+      if (k >= RACE_FADE_DAYS) inTop -= a.shown[k - RACE_FADE_DAYS];
+      a.alpha[k] = inTop / RACE_FADE_DAYS;
+    }
+  }
   // Start just before the first visible listen instead of at the beginning of the range.
   let first = N - 1;
   for (const a of artists) {
@@ -1003,30 +1015,40 @@ function drawRace() {
   const labels = [];
   const iStart = Math.max(0, Math.floor(t - win) - 1);
   for (const a of artists) {
+    const next = d + 1 < N ? valAt(a, d + 1) : valAt(a, d);
+    const head = valAt(a, d) + (next - valAt(a, d)) * frac;
+    const pt = (i) => (i > d ? [x1, yOf(head)] : [xOf(i), yOf(valAt(a, i))]);
     ctx.strokeStyle = a.color;
-    let open = false;
+    let open = false; // fully opaque stretches are batched into one path
     ctx.beginPath();
     for (let i = iStart; i <= d; i++) {
-      if (!a.shown[i]) {
-        if (open) {
-          ctx.lineTo(xOf(i), yOf(valAt(a, i)));
-          open = false;
-        }
+      const segAlpha = Math.min(a.alpha[i], a.alpha[Math.min(i + 1, d)]);
+      if (segAlpha < 0.02) {
+        if (open) ctx.stroke();
+        ctx.beginPath();
+        open = false;
         continue;
       }
-      const x = xOf(i),
-        y = yOf(valAt(a, i));
-      if (open) ctx.lineTo(x, y);
-      else ctx.moveTo(x, y);
-      open = true;
+      const [ax, ay] = pt(i),
+        [bx, by] = pt(i + 1);
+      if (segAlpha > 0.98) {
+        if (!open) ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        open = true;
+      } else {
+        if (open) ctx.stroke();
+        open = false;
+        ctx.globalAlpha = segAlpha;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+      }
     }
-    if (open && a.shown[d]) {
-      const next = d + 1 < N ? valAt(a, d + 1) : valAt(a, d);
-      const cur = valAt(a, d) + (next - valAt(a, d)) * frac;
-      ctx.lineTo(x1, yOf(cur));
-      labels.push({ a, y: yOf(cur), val: cur });
-    }
-    ctx.stroke();
+    if (open) ctx.stroke();
+    if (a.alpha[d] > 0.05) labels.push({ a, y: yOf(head), val: head, alpha: a.alpha[d] });
   }
   ctx.restore();
 
@@ -1050,6 +1072,7 @@ function drawRace() {
   for (const L of labels) {
     const cy = L.ly,
       cx = x1 + R;
+    ctx.globalAlpha = L.alpha; // labels fade with their line
     if (Math.abs(cy - L.y) > 1) {
       ctx.strokeStyle = L.a.color;
       ctx.lineWidth = 1;
@@ -1093,6 +1116,7 @@ function drawRace() {
     ctx.fillText(label, cx + R + 8, cy);
     ctx.fillStyle = c.muted;
     ctx.fillText(val, cx + R + 8 + ctx.measureText(label).width, cy);
+    ctx.globalAlpha = 1;
   }
 
   // Axes + title + big date.
