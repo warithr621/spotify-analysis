@@ -943,10 +943,10 @@ function drawRace() {
   const d = Math.floor(t),
     frac = t - d;
   const fs = Math.max(11, Math.min(16, w / 62));
-  const x0 = Math.min(64, w * 0.09),
+  const x0 = Math.min(64, w * 0.09) + fs + 6, // + room for the rotated y-axis title
     x1 = w - Math.min(300, w * 0.3); // room for "Title · Artist" labels
   const yTop = Math.max(66, h * 0.15),
-    yBot = h - 34;
+    yBot = h - 2 * fs - 24; // date labels, then the x-axis title, below the plot
   const pw = x1 - x0,
     ph = yBot - yTop;
 
@@ -1125,6 +1125,21 @@ function drawRace() {
   ctx.lineTo(x0, yBot);
   ctx.lineTo(x1 + 8, yBot);
   ctx.stroke();
+
+  // Axis titles. The y title follows "Counted over": each value is the total for the
+  // period ending on that day.
+  ctx.fillStyle = c.muted;
+  ctx.font = `600 ${fs - 1}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("Date", (x0 + x1) / 2, h - 10);
+  ctx.save();
+  ctx.translate(8 + fs / 2, (yTop + yBot) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = "middle";
+  ctx.fillText(race.trail ? `Minutes listened, last ${race.trail} days` : "Total minutes listened", 0, 0);
+  ctx.restore();
+
   ctx.textBaseline = "alphabetic";
   ctx.textAlign = "left";
   ctx.fillStyle = c.text;
