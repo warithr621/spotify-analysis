@@ -196,7 +196,12 @@ def api_pull():
             and (os.environ.get("DATA_REPO_TOKEN") or "").strip()
         )
         pulled = False
+        exports_msg = ""
         if cloud_configured:
+            # Yearly export files first (new ones land here), then the live buffer.
+            ex_ok, exports_msg = cloud_pull.pull_exports()
+            if not ex_ok:
+                logger.warning("Export pull: %s", exports_msg)
             pulled = cloud_pull.pull_live()
 
         try:
@@ -208,6 +213,8 @@ def api_pull():
         rebuilt_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if cloud_configured:
             msg = "Pulled latest data from repo and rebuilt dashboard." if pulled else "Rebuilt from local files (cloud pull failed)."
+            if exports_msg and "already up to date" not in exports_msg:
+                msg += " " + exports_msg
         else:
             msg = "Rebuilt dashboard from local files."
         return jsonify(ok=True, message=msg, rebuilt_at=rebuilt_at), 200
@@ -245,6 +252,9 @@ def api_refresh():
         # (best-effort — a pull failure doesn't abort the local sync).
         cloud_pulled = False
         if cloud_configured:
+            ex_ok, ex_msg = cloud_pull.pull_exports()
+            if not ex_ok:
+                logger.warning("Export pull: %s", ex_msg)
             cloud_pulled = cloud_pull.pull_live()
 
         # Always run a local Spotify sync to pick up the most recent plays.
