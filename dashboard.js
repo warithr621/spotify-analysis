@@ -1275,6 +1275,9 @@ function wireRaceControls() {
 
 let riverCount = 12; // 0 = all genres
 
+/** Colour for genre index `g` (all-time rank), so a genre looks the same everywhere and in every date range. */
+const genreColor = (g) => `hsl(${(g * 137.508) % 360} 70% 62%)`;
+
 /** Place a tooltip near (x, y) inside a w x h box, flipping or clamping so it is never cut off. */
 function placeTip(tip, x, y, w, h) {
   const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1377,8 +1380,7 @@ function renderRiver() {
     [H - m.b, m.t]
   );
   const area = d3.area().x((_, i) => x(i)).y0((d) => y(d[0])).y1((d) => y(d[1])).curve(d3.curveBasis);
-  // Colour by all-time genre rank, so a genre keeps its colour across date ranges.
-  const color = (k) => `hsl(${(DATA.genres.indexOf(k) * 137.508) % 360} 70% 62%)`;
+  const color = (k) => genreColor(DATA.genres.indexOf(k));
 
   const svg = d3.select(host).append("svg").attr("width", W).attr("height", H)
     .attr("role", "img").attr("aria-label", "Streamgraph of your top genres over time");
@@ -1461,19 +1463,21 @@ function wireRiver() {
 
 /* ---------- Artist web (d3 force graph) ---------- */
 
-// Ordered so the first few clusters (the ones that usually exist) contrast most.
-const WEB_PALETTE = ["#c026d3", "#6366f1", "#f97316", "#0ea5e9", "#10b981", "#db2777", "#eab308", "#9333ea"];
 const WEB_MIN_SHARED = 2;     // sessions two artists must share to be linked
 const WEB_LINKS_PER_NODE = 3; // cap on links per artist, once each has its single strongest link
 const WEB_LABELS = 15;        // only the top N artists are labelled until highlighted
 const WEB_PAIR_STRIDE = 1e4;  // pair key = lo * stride + hi (artist idx < graph_artists.length)
 
+let webCount = 50;        // top N artists in the range
+let webLinks = "session"; // "session" (played together) or "lastfm" (Last.fm similar artists)
+const WEB_NO_GENRE = "#b9a8cc";
+const WEB_PLAIN = "#c026d3"; // every node when there are no genres (no Last.fm cache)
 let webSim = null;
 let webFit = null;        // re-fits the current graph to the view (Reset view button)
 let webPinned = null;     // node whose details stay open after a click
 const webPos = new Map(); // last layout position by artist name, so re-renders don't reshuffle
 
-/** Co-listening links among the top `count` artists in the current date range. */
+/** Links among the top `count` artists in the current date range: shared sessions, or Last.fm similarity. */
 function buildWebGraph(count) {
   const idxByName = new Map((DATA.graph_artists || []).map((name, i) => [name, i]));
   const ranked = rankArtists(state.fromDay, state.toDay).slice(0, count);
@@ -1485,7 +1489,7 @@ function buildWebGraph(count) {
   const lo = dayStrToOff(state.fromDay),
     hi = dayStrToOff(state.toDay);
   const pair = new Map();
-  for (const [day, arts] of DATA.artist_sessions || []) {
+  for (const [day, arts] of webLinks === "session" ? DATA.artist_sessions || [] : []) {
     if (day < lo || day > hi) continue;
     const members = arts.filter((i) => nodeByIdx.has(i)); // arts is sorted ascending
     if (members.length < 2) continue;
@@ -1500,6 +1504,13 @@ function buildWebGraph(count) {
 
   // Cosine-normalised strength so heavy-rotation artists don't link to everything.
   const cand = [];
+  if (webLinks === "lastfm") {
+    for (const [i, j, match] of DATA.lastfm_links || []) {
+      const s = nodeByIdx.get(i),
+        t = nodeByIdx.get(j);
+      if (s && t) cand.push({ source: s, target: t, match, w: match });
+    }
+  }
   for (const [k, shared] of pair) {
     if (shared < WEB_MIN_SHARED) continue;
     const s = nodeByIdx.get(Math.floor(k / WEB_PAIR_STRIDE)),
@@ -1528,39 +1539,7 @@ function buildWebGraph(count) {
     bump(l.target);
   }
   const nodes = top.filter((n) => deg.has(n));
-
-  // Weighted label propagation to colour clusters.
-  const adj = new Map(nodes.map((n) => [n, []]));
-  for (const l of links) {
-    adj.get(l.source).push([l.target, l.w]);
-    adj.get(l.target).push([l.source, l.w]);
-  }
-  const label = new Map(nodes.map((n) => [n, n.rank]));
-  for (let it = 0; it < 15; it++) {
-    let changed = false;
-    for (const n of nodes) {
-      const tally = new Map();
-      for (const [o, w] of adj.get(n)) tally.set(label.get(o), (tally.get(label.get(o)) || 0) + w);
-      let best = label.get(n),
-        bw = -1;
-      for (const [lab, w] of tally) if (w > bw || (w === bw && lab < best)) { best = lab; bw = w; }
-      if (best !== label.get(n)) { label.set(n, best); changed = true; }
-    }
-    if (!changed) break;
-  }
-  // Groups ordered by total minutes; each is named after its top artist (nodes are in rank order).
-  const groupByLabel = new Map();
-  for (const n of nodes) {
-    const g = groupByLabel.get(label.get(n)) || { lead: n, size: 0, fm: 0 };
-    g.size++;
-    g.fm += n.fm;
-    groupByLabel.set(label.get(n), g);
-    n.group = g;
-  }
-  const groups = [...groupByLabel.values()].sort((a, b) => b.fm - a.fm);
-  groups.forEach((g, i) => (g.color = WEB_PALETTE[i % WEB_PALETTE.length]));
-
-  return { nodes, links, groups, hidden: top.length - nodes.length, untracked: ranked.length - top.length };
+  return { nodes, links, hidden: top.length - nodes.length, untracked: ranked.length - top.length };
 }
 
 function renderArtistWeb() {
@@ -1581,13 +1560,17 @@ function renderArtistWeb() {
     host.innerHTML = `<p class="web-empty">d3 failed to load, so the artist web is unavailable.</p>`;
     return;
   }
-  const count = +document.getElementById("web-count").value || 40;
-  const { nodes, links, groups, hidden, untracked } = buildWebGraph(count);
+  const { nodes, links, hidden, untracked } = buildWebGraph(webCount);
   if (nodes.length < 2) {
-    host.innerHTML = `<p class="web-empty">Not enough shared listening sessions in this range to link artists.</p>`;
+    const why = webLinks === "lastfm" ? "Last.fm similarity links between your top artists" : "shared listening sessions";
+    host.innerHTML = `<p class="web-empty">Not enough ${why} in this range to link artists.</p>`;
     return;
   }
-  const notes = ["Drag · scroll to zoom · click an artist for details"];
+  // Nodes are coloured by genre (-1 = none).
+  const hasGenres = (DATA.genres || []).length > 0;
+  const key = (n) => n.g ?? -1;
+  const color = (n) => (n.g != null ? genreColor(n.g) : hasGenres ? WEB_NO_GENRE : WEB_PLAIN);
+  const notes = [];
   if (hidden) notes.push(`${hidden} unlinked artist${hidden > 1 ? "s" : ""} hidden`);
   if (untracked) notes.push(`${untracked} outside your all-time top ${DATA.graph_artists.length} not tracked`);
   hint.textContent = notes.join(" · ");
@@ -1613,19 +1596,20 @@ function renderArtistWeb() {
   const zoom = d3.zoom().scaleExtent([0.2, 4]).on("zoom", (e) => root.attr("transform", e.transform));
   svg.call(zoom);
 
-  // Links inside a cluster take its colour; links between clusters stay neutral (CSS .cross).
+  // Links inside a genre take its colour; links between genres stay neutral (CSS .cross).
   const wMax = Math.max(...links.map((l) => l.w));
+  const same = (l) => key(l.source) === key(l.target);
   const link = root.append("g").attr("class", "web-links").selectAll("line").data(links).join("line")
-    .classed("cross", (l) => l.source.group !== l.target.group)
-    .attr("stroke", (l) => l.source.group.color)
+    .classed("cross", (l) => !same(l))
+    .attr("stroke", (l) => color(l.source))
     .attr("stroke-width", (l) => 1 + 5 * (l.w / wMax))
-    .attr("stroke-opacity", (l) => (l.source.group === l.target.group ? 0.3 + 0.45 * (l.w / wMax) : 0.15 + 0.3 * (l.w / wMax)));
+    .attr("stroke-opacity", (l) => (same(l) ? 0.3 + 0.45 * (l.w / wMax) : 0.15 + 0.3 * (l.w / wMax)));
 
   const node = root.append("g").selectAll("g").data(nodes).join("g").attr("class", "web-node")
     .classed("labeled", (n) => n.rank < WEB_LABELS);
   node.append("circle").attr("r", radius)
-    .attr("fill", (n) => (n.image ? `url(#web-img-${n.idx})` : n.group.color))
-    .attr("stroke", (n) => n.group.color).attr("stroke-width", 3);
+    .attr("fill", (n) => (n.image ? `url(#web-img-${n.idx})` : color(n)))
+    .attr("stroke", color).attr("stroke-width", 3);
   node.filter((n) => !n.image).append("text").attr("class", "web-initial")
     .attr("text-anchor", "middle").attr("dy", "0.35em")
     .text((n) => (n.name.trim()[0] || "?").toUpperCase());
@@ -1647,7 +1631,12 @@ function renderArtistWeb() {
   };
   const infoHtml = (n) => {
     const top5 = [...nbrs.get(n)].sort((a, b) => b[1].w - a[1].w).slice(0, 5);
-    return `<strong>${escHtml(n.name)}</strong><br>${listeningFriendlyPlain(n.fm / 60000)}` +
+    const genre = n.g != null ? `<br><span class="web-sub">${escHtml(DATA.genres[n.g])}</span>` : "";
+    if (webLinks === "lastfm")
+      return `<strong>${escHtml(n.name)}</strong><br>${listeningFriendlyPlain(n.fm / 60000)}${genre}` +
+        `<div class="web-sub">Most similar on Last.fm:</div>` +
+        `<ul>${top5.map(([o, l]) => `<li>${escHtml(o.name)} <span>${Math.round(100 * l.match)}% match</span></li>`).join("")}</ul>`;
+    return `<strong>${escHtml(n.name)}</strong><br>${listeningFriendlyPlain(n.fm / 60000)}${genre}` +
       `<div class="web-sub">Played together, of its ${fmtNum(n.sess)} sessions with other top artists:</div>` +
       `<ul>${top5.map(([o, l]) => `<li>${escHtml(o.name)} <span>${l.shared} (${Math.round((100 * l.shared) / n.sess)}%)</span></li>`).join("")}</ul>`;
   };
@@ -1727,13 +1716,30 @@ function renderArtistWeb() {
     .on("drag", (e, n) => { n.fx = e.x; n.fy = e.y; })
     .on("end", (e, n) => { if (!e.active) webSim.alphaTarget(0); n.fx = n.fy = null; }));
 
-  legend.innerHTML = groups.slice(0, WEB_PALETTE.length).map((g) =>
-    `<span><i style="background:${g.color}"></i>${escHtml(g.lead.name)}${g.size > 1 ? ` &amp; ${g.size - 1} more` : ""}</span>`
-  ).join("");
+  if (hasGenres) {
+    const counts = new Map();
+    for (const n of nodes) counts.set(key(n), (counts.get(key(n)) || 0) + 1);
+    const order = [...counts.keys()].filter((g) => g >= 0).sort((a, b) => a - b);
+    if (counts.has(-1)) order.push(-1);
+    legend.innerHTML = order.map((g) =>
+      `<span><i style="background:${g < 0 ? WEB_NO_GENRE : genreColor(g)}"></i>${g < 0 ? "no genre" : escHtml(DATA.genres[g])} (${counts.get(g)})</span>`
+    ).join("");
+  }
 }
 
 function wireWebControls() {
-  document.getElementById("web-count").addEventListener("change", renderArtistWeb);
+  // Last.fm links need the Last.fm cache; without it that button stays disabled.
+  document.querySelector('.seg[data-web="links"] [data-v="lastfm"]').disabled = !(DATA.lastfm_links || []).length;
+  document.querySelectorAll(".seg[data-web]").forEach((seg) => {
+    seg.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-v]");
+      if (!btn) return;
+      seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      if (seg.dataset.web === "links") webLinks = btn.dataset.v;
+      else webCount = +btn.dataset.v;
+      renderArtistWeb();
+    });
+  });
   document.getElementById("web-reset").addEventListener("click", () => webFit && webFit(true));
   document.getElementById("web-panel").addEventListener("click", (e) => {
     if (!e.target.closest("#web-open") || !webPinned) return;

@@ -155,19 +155,27 @@
     <section id="artist-web" class="anchor-section">
     <div class="section-title">
       <h2>Artist Web</h2>
-      <span>Top artists linked by how often you play them in the same session</span>
+      <span>Top artists linked by how often you play them together, or by Last.fm similarity</span>
     </div>
     <div class="chart-card chart-card--full">
       <div class="web-controls">
-        <label for="web-count">Artists</label>
-        <select id="web-count">
-          <option value="25">Top 25</option>
-          <option value="40" selected>Top 40</option>
-          <option value="60">Top 60</option>
-          <option value="80">Top 80</option>
-        </select>
+        <div class="seg-group" role="group" aria-labelledby="web-count-lbl">
+          <span class="seg-label" id="web-count-lbl">Artists</span>
+          <div class="seg" data-web="count">
+            <button type="button" data-v="25" aria-pressed="false">Top 25</button>
+            <button type="button" data-v="50" aria-pressed="true">Top 50</button>
+            <button type="button" data-v="75" aria-pressed="false">Top 75</button>
+          </div>
+        </div>
+        <div class="seg-group" role="group" aria-labelledby="web-links-lbl">
+          <span class="seg-label" id="web-links-lbl">Linked by</span>
+          <div class="seg" data-web="links">
+            <button type="button" data-v="session" aria-pressed="true" title="Played in the same listening session">Played together</button>
+            <button type="button" data-v="lastfm" aria-pressed="false" title="Similar according to Last.fm">Similar artists</button>
+          </div>
+        </div>
         <button type="button" class="secondary" id="web-reset">Reset view</button>
-        <span class="web-hint" id="web-hint">Drag · scroll to zoom · click an artist for details</span>
+        <span class="web-hint" id="web-hint"></span>
       </div>
       <div class="web-stage">
         <div class="web-host" id="web-host"></div>

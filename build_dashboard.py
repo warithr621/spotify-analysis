@@ -474,10 +474,11 @@ def main() -> None:
     # One genre per top artist (tag families merged, specific over generic;
     # untagged artists borrow from their Last.fm neighbours). Artists outside
     # the top GRAPH_ARTIST_CAP have no `g`.
+    lastfm_links = build_lastfm_links(graph_artists, lastfm_cache)
     genre_names, genre_idx, genre_inferred = genres.assign_genres(
         [e.get("tags", []) for e in artists_out[:GRAPH_ARTIST_CAP]],
         [e["ms"] / 60000 for e in artists_out[:GRAPH_ARTIST_CAP]],
-        build_lastfm_links(graph_artists, lastfm_cache),
+        lastfm_links,
     )
     for e, g, inferred in zip(artists_out, genre_idx, genre_inferred):
         if g is not None:
@@ -611,6 +612,7 @@ def main() -> None:
         "artist_sessions": artist_sessions,
         "graph_artists": graph_artists,
         "genres": genre_names,
+        "lastfm_links": lastfm_links,
         "notes": (
             "Spotify Extended Streaming History does not include genre metadata; podcast/audiobook rows excluded. "
             "Tracks and albums collapse duplicate rows that match the same normalized title + performer "
