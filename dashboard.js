@@ -736,9 +736,7 @@ const race = {
   kind: "artists", // what is ranked: artists | albums | tracks
   trail: 30, // trailing-window length in days; 0 = all time (cumulative)
   win: 365, // days visible on the x-axis; 0 = the whole range
-  pending: false,
   scrubbing: false, // user is dragging the slider
-  observer: null,
   ctx: null,
   w: 0,
   h: 0,
@@ -1169,10 +1167,9 @@ function raceFrame(now) {
   if (race.playing) race.raf = requestAnimationFrame(raceFrame);
 }
 
-function racePlay(fromStart) {
+function racePlay() {
   if (!race.data) return;
-  race.pending = false;
-  if (fromStart || race.t >= race.data.N - 1) race.t = race.data.start;
+  if (race.t >= race.data.N - 1) race.t = race.data.start; // Replay from the start
   race.playing = true;
   race.last = performance.now();
   cancelAnimationFrame(race.raf);
@@ -1186,37 +1183,15 @@ function racePause() {
   raceSyncControls();
 }
 
-/** (Re)build for the current date range; autoplay once the card is on screen. */
+/** (Re)build for the current date range, resting on the latest day until Play is pressed. */
 function renderRace() {
   racePause();
   race.data = buildRaceData();
-  race.t = race.data ? race.data.start : 0;
+  race.t = race.data ? race.data.N - 1 : 0;
   raceResize();
   drawRace();
   raceSyncControls();
   raceRenderTicks();
-  if (!race.data) return;
-  if (prefersReducedMotion()) {
-    race.t = race.data.N - 1;
-    drawRace();
-    raceSyncControls();
-    return;
-  }
-  const card = document.getElementById("c-race").closest(".chart-card");
-  race.pending = true;
-  if (!("IntersectionObserver" in window)) return racePlay(true);
-  if (!race.observer) {
-    race.observer = new IntersectionObserver(
-      (entries) => {
-        if (race.pending && entries.some((e) => e.isIntersecting)) racePlay(true);
-      },
-      { threshold: 0.35 }
-    );
-    race.observer.observe(card);
-  } else {
-    const r = card.getBoundingClientRect();
-    if (r.top < window.innerHeight * 0.65 && r.bottom > 0) racePlay(true);
-  }
 }
 
 /** Rebuild after a kind/trail change, keeping the current position and play state. */
@@ -1243,9 +1218,8 @@ function wireRaceControls() {
       else raceRebuild();
     });
   });
-  document.getElementById("race-play").addEventListener("click", () => (race.playing ? racePause() : racePlay(false)));
+  document.getElementById("race-play").addEventListener("click", () => (race.playing ? racePause() : racePlay()));
   document.getElementById("race-scrub").addEventListener("input", (e) => {
-    race.pending = false;
     race.t = +e.target.value;
     racePause();
     drawRace();
