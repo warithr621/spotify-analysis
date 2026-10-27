@@ -9,7 +9,6 @@ dashboard keeps working off whatever live buffer it already has.
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import logging
 import os
@@ -160,21 +159,12 @@ def pull_live() -> bool:
     return True
 
 
-def _git_blob_sha(path: Path) -> str:
-    """The SHA GitHub reports for this file's content (git's `blob <size>\0<bytes>` hash)."""
-    h = hashlib.sha1()
-    h.update(b"blob %d\0" % path.stat().st_size)
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def pull_exports() -> tuple[bool, str]:
     """Download the data repo's yearly `Streaming_History_Audio_*.json` export files that are
-    missing locally or whose content differs (compared by git blob SHA, so unchanged files are
-    skipped without downloading). The live buffer is handled by `pull_live`. Best-effort:
-    returns (False, msg) on any failure without raising, leaving existing local files untouched."""
+    missing locally. An existing local file is never replaced, even if the repo's copy differs:
+    exports are read-only once written (a new export arrives as a new file), and the local copy
+    stays authoritative. The live buffer is handled by `pull_live`. Best-effort: returns
+    (False, msg) on any failure without raising, leaving existing local files untouched."""
     repo = (os.environ.get("DATA_REPO") or "").strip()
     token = (os.environ.get("DATA_REPO_TOKEN") or "").strip()
     if not repo or not token:
@@ -194,7 +184,7 @@ def pull_exports() -> tuple[bool, str]:
         downloaded = []
         for t in remote:
             dest = HISTORY_DIR / t["path"]
-            if dest.is_file() and _git_blob_sha(dest) == t["sha"]:
+            if dest.exists():
                 continue
             tmp = tempfile.NamedTemporaryFile(mode="wb", dir=str(HISTORY_DIR), prefix=".export.", suffix=".tmp", delete=False)
             try:
