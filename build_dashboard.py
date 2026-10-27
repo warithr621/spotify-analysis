@@ -560,7 +560,7 @@ def main() -> None:
     country_list = [{"c": k, "ms": v} for k, v in sorted(country_ms.items(), key=lambda x: -x[1])][:12]
     reason_list = [{"r": k, "ms": v} for k, v in sorted(reason_end_ms.items(), key=lambda x: -x[1])]
 
-    recent_streams = top_recent_streams(events, 20)
+    recent_streams = top_recent_streams(events, 25)
 
     now_ct = datetime.now(DISPLAY_TZ)
     bundle = {

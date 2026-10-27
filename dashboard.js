@@ -204,15 +204,51 @@ function renderKpis({ fromDay, toDay }) {
     </div>`).join("");
 }
 
+/* ---------- Render only what's on screen ----------
+ * Each chart registers here with the element it draws into. A date-range change marks them all
+ * stale, and each one redraws only once it is (about to be) on screen, so Apply range never pays
+ * for sections you aren't looking at. A view in a hidden tab has no layout box, so it waits until
+ * its tab is opened (the observer fires as the tab appears). */
+const lazyViews = [];
+let lazyObserver = null;
+
+function lazyView(el, render) {
+  const v = { el, render, stale: true, near: false };
+  lazyViews.push(v);
+  lazyObserver ||= new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const view = lazyViews.find((x) => x.el === e.target);
+      view.near = e.isIntersecting;
+      if (view.near && view.stale) refreshView(view);
+    }
+  }, { rootMargin: "400px 0px" });
+  lazyObserver.observe(el);
+}
+
+function refreshView(v) {
+  if (!v.el.offsetParent) return; // hidden (closed tab or hidden card)
+  v.stale = false;
+  v.render();
+}
+
 function renderCharts() {
-  const { fromDay, toDay } = state;
-  const days = daysSlice(fromDay, toDay);
+  hydrateArtistExplorer();
+  for (const v of lazyViews) {
+    v.stale = true;
+    if (v.near) refreshView(v);
+  }
+}
 
-  const mSeries = buildMonthSeriesFromDays(days);
-  const ySeries = buildYearSeriesFromDays(days);
+let trendBy = "month"; // month | year
 
-  if (state.charts.month) state.charts.month.destroy();
-  state.charts.month = new Chart(document.getElementById("c-month"), {
+/** Minutes by month (line) or by year (bars), in one card with a Month / Year toggle. */
+function renderTrend() {
+  const days = daysSlice(state.fromDay, state.toDay);
+  const by = trendBy;
+  const mSeries = by === "month" ? buildMonthSeriesFromDays(days) : [];
+  const ySeries = by === "year" ? buildYearSeriesFromDays(days) : [];
+  if (state.charts.trend) state.charts.trend.destroy();
+  const cfg = by === "month" ? {
     type: "line",
     data: {
       labels: mSeries.map((x) => x.m),
@@ -242,10 +278,7 @@ function renderCharts() {
         },
       },
     }),
-  });
-
-  if (state.charts.year) state.charts.year.destroy();
-  state.charts.year = new Chart(document.getElementById("c-year"), {
+  } : {
     type: "bar",
     data: {
       labels: ySeries.map((x) => x.y),
@@ -275,20 +308,11 @@ function renderCharts() {
         },
       },
     }),
-  });
-
-  rebuildRankings();
-  hydrateArtistExplorer();
-  renderArtistChart();
-  renderRace();
-  renderRiver();
-  renderHeatmap();
-  renderArtistWeb();
-  renderTasteMap();
+  };
+  state.charts.trend = new Chart(document.getElementById("c-trend"), cfg);
 }
 
 let qArtists='', qAlbums='', qTracks='';
-let ra=[], rt=[], ralb=[];
 
 const RANK_CAP = { artists: 160, albums: 200, tracks: 250 };
 
@@ -365,16 +389,12 @@ function renderRankSection(kind, rows, q) {
   applySearchVisibility(kind, q);
 }
 
-function rebuildRankings(){
-  const { fromDay, toDay } = state;
+const RANKERS = { artists: rankArtists, albums: rankAlbums, tracks: rankTracks };
 
-  ra = rankArtists(fromDay, toDay);
-  rt = rankTracks(fromDay, toDay);
-  ralb = rankAlbums(fromDay, toDay);
-
-  renderRankSection("artists", ra, qArtists);
-  renderRankSection("albums", ralb, qAlbums);
-  renderRankSection("tracks", rt, qTracks);
+/** One Rankings tab (each tab is its own lazy view, so closed tabs aren't ranked). */
+function renderRankings(kind) {
+  const q = { artists: qArtists, albums: qAlbums, tracks: qTracks }[kind];
+  renderRankSection(kind, RANKERS[kind](state.fromDay, state.toDay), q);
 }
 
 function escAttr(v) {
@@ -532,6 +552,8 @@ function bootstrap(){
 
   renderKpis({ fromDay: state.fromDay, toDay: state.toDay });
   wireInteractions();
+  wireTabs();
+  wireTrend();
   wireRaceControls();
   wireRiver();
   wireHeatmap();
@@ -553,12 +575,23 @@ function bootstrap(){
     document.getElementById('btn-apply').click();
   };
 
-  renderCharts();
   const first = DATA.artists[0]?.name||'';
-  if (first) {
-    document.getElementById('artist-input').value = first;
-    renderArtistChart();
-  }
+  if (first) document.getElementById('artist-input').value = first;
+
+  // Heavy views draw lazily (see lazyView); renderCharts() marks them stale on every range change.
+  for (const kind of ["artists", "albums", "tracks"]) lazyView(document.getElementById(`pane-${kind}`), () => renderRankings(kind));
+  lazyView(document.getElementById("trend-card"), renderTrend);
+  lazyView(document.getElementById("heat-card"), renderHeatmap);
+  lazyView(document.getElementById("c-race").closest(".chart-card"), renderRace);
+  const riverCard = document.getElementById("river-card");
+  riverCard.hidden = !((DATA.genres || []).length && typeof d3 !== "undefined");
+  if (!riverCard.hidden) lazyView(riverCard, renderRiver);
+  lazyView(document.getElementById("pane-map"), renderTasteMap);
+  lazyView(document.getElementById("pane-web"), renderArtistWeb);
+  lazyView(document.getElementById("artist"), renderArtistChart);
+  // No Last.fm data: the Artist web (the default tab) is the only Taste tab.
+  if (!tasteAvailable()) document.getElementById("tab-map").hidden = true;
+  renderCharts();
 
   renderRecentPlays();
   wireRefreshControls();
@@ -571,42 +604,32 @@ function escHtml(v) {
     .replace(/>/g, "&gt;");
 }
 
-function formatRecentPlayChicago(iso) {
+/** "3:45 PM" today, "Yesterday, 9:12 PM", else "Oct 25, 9:12 PM" (display timezone, i.e. Central). */
+function formatRecentWhen(iso) {
   if (!iso) return "—";
   const s = String(iso);
   const d = new Date(s.endsWith("Z") ? s : s.includes("+") ? s : `${s}Z`);
-  if (Number.isNaN(d.getTime())) return escHtml(s);
-  const tz = DATA.coverage.display_timezone || "America/Chicago";
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone: tz,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
-  }).format(d);
+  if (Number.isNaN(d.getTime())) return s;
+  const timeZone = DATA.coverage.display_timezone || "America/Chicago";
+  const day = (x) => new Intl.DateTimeFormat("en-CA", { timeZone }).format(x); // YYYY-MM-DD
+  const time = new Intl.DateTimeFormat(undefined, { timeZone, hour: "numeric", minute: "2-digit" }).format(d);
+  const today = day(new Date()), yesterday = day(new Date(Date.now() - 864e5));
+  if (day(d) === today) return time;
+  if (day(d) === yesterday) return `Yesterday, ${time}`;
+  return `${new Intl.DateTimeFormat(undefined, { timeZone, month: "short", day: "numeric" }).format(d)}, ${time}`;
 }
 
 function renderRecentPlays() {
-  const body = document.getElementById("tb-recent");
-  if (!body) return;
+  const list = document.getElementById("recent-list");
   const rows = Array.isArray(DATA.recent_streams) ? DATA.recent_streams : [];
   if (!rows.length) {
-    body.innerHTML =
-      `<tr><td colspan="4" style="padding:1rem;color:var(--muted);text-align:center;">No recent plays in this export.</td></tr>`;
+    list.innerHTML = `<li class="recent-empty">No recent plays in this export.</li>`;
     return;
   }
-  body.innerHTML = rows
-    .slice(0, 10)
-    .map((r) => {
-      const t = escHtml(r.track || "—");
-      const a = escHtml(r.artist || "—");
-      const al = escHtml(r.album || "—");
-      const ts = formatRecentPlayChicago(r.ts_utc);
-      return `<tr><td>${t}</td><td>${a}</td><td>${al}</td><td class="recent-time">${escHtml(ts)}</td></tr>`;
-    })
+  list.innerHTML = rows
+    .slice(0, 25)
+    .map((r) => `<li title="${escAttr(r.album || "")}"><span class="rp-track">${escHtml(r.track || "—")}</span>` +
+      `<span class="rp-artist">${escHtml(r.artist || "—")}</span><time>${escHtml(formatRecentWhen(r.ts_utc))}</time></li>`)
     .join("");
 }
 
@@ -709,6 +732,36 @@ function wireRefreshControls() {
       }
     });
   }
+}
+
+/** Tab bars (`[data-tabs]`): each tab shows its `aria-controls` pane and hides the others. */
+function selectTab(bar, btn) {
+  for (const b of bar.querySelectorAll('[role="tab"]')) {
+    const on = b === btn;
+    b.setAttribute("aria-selected", String(on));
+    document.getElementById(b.getAttribute("aria-controls")).hidden = !on;
+  }
+}
+
+function wireTabs() {
+  document.querySelectorAll("[data-tabs]").forEach((bar) =>
+    bar.addEventListener("click", (e) => {
+      const btn = e.target.closest('[role="tab"]');
+      if (btn) selectTab(bar, btn);
+    })
+  );
+}
+
+function wireTrend() {
+  const seg = document.getElementById("trend-by");
+  seg.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-v]");
+    if (!btn) return;
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    trendBy = btn.dataset.v;
+    document.getElementById("trend-title").textContent = trendBy === "month" ? "Minutes by Month" : "Minutes by Year";
+    renderTrend();
+  });
 }
 
 function wireInteractions(){
@@ -1937,7 +1990,6 @@ const taste = {
   w: 0,
   h: 0,
   view: null,
-  waiting: null, // IntersectionObserver until the layout has been computed
 };
 
 const tasteAvailable = () => typeof d3 !== "undefined" && (DATA.lastfm_links || []).length > 0;
@@ -2232,25 +2284,10 @@ function tastePause() {
   tasteSyncControls();
 }
 
-/** (Re)build for the current date range, resting on the latest day until Play is pressed. The layout
- * (~0.4 s of force simulation) is only computed once the section is about to scroll into view. */
+/** (Re)build for the current date range, resting on the latest day until Play is pressed. Runs as a
+ * lazy view, so the layout (~0.4 s of force simulation) is only computed once the map is on screen. */
 function renderTasteMap() {
-  const section = document.getElementById("taste-map");
-  section.hidden = !tasteAvailable();
-  document.getElementById("toc-taste").hidden = section.hidden;
-  if (section.hidden) return;
   tastePause();
-  if (!taste.layout && "IntersectionObserver" in window) {
-    if (taste.waiting) return;
-    taste.waiting = new IntersectionObserver((entries) => {
-      if (!entries.some((e) => e.isIntersecting)) return;
-      taste.waiting.disconnect();
-      tasteLayout();
-      renderTasteMap();
-    }, { rootMargin: "600px 0px" });
-    taste.waiting.observe(section);
-    return;
-  }
   tasteLayout();
   taste.data = buildTasteData();
   taste.t = taste.data ? taste.data.N - 1 : 0;

@@ -18,13 +18,11 @@
       <div class="toc-inner">
         <span class="toc-label">Jump to...</span>
         <a href="#snapshot">Snapshot</a>
-        <a href="#trends">Trends</a>
-        <a href="#heatmap">Heatmap</a>
-        <a href="#artist">Artist Dive</a>
-        <a href="#artist-web">Artist Web</a>
-        <a href="#taste-map" id="toc-taste" hidden>Taste Map</a>
-        <a href="#recent-plays">Recent Plays</a>
         <a href="#rankings">Rankings</a>
+        <a href="#over-time">Over Time</a>
+        <a href="#taste">Taste</a>
+        <a href="#artist">Artist Dive</a>
+        <a href="#recent-plays">Recent Plays</a>
       </div>
     </nav>
     <header class="hero">
@@ -67,19 +65,94 @@
 
     <section id="snapshot" class="anchor-section" aria-label="Snapshot"><div id="kpi-host" class="kpi-grid"></div></section>
 
-    <section id="trends" class="anchor-section">
+    <section id="rankings" class="anchor-section">
     <div class="section-title">
-      <h2>Rolling Trends</h2>
-      <span>Minutes streamed &amp; play counts over time</span>
+      <h2>Rankings</h2>
+      <span>Your favorite artists, albums, and tracks</span>
+    </div>
+    <div class="tabs" role="tablist" data-tabs="rank">
+      <button type="button" role="tab" aria-selected="true" aria-controls="pane-artists" data-v="artists">Artists</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="pane-albums" data-v="albums">Albums</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="pane-tracks" data-v="tracks">Tracks</button>
+    </div>
+    <div class="rank-card" data-section="artists" id="pane-artists" role="tabpanel">
+      <div class="rank-head">
+        <input type="search" id="srch-artists" placeholder="Search artists…" />
+      </div>
+      <div class="podium" id="pod-artists"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Name</span>
+          <span class="num-head">Streams</span>
+          <span class="num-head">Minutes</span>
+        </div>
+        <div id="list-artists"></div>
+      </div>
+    </div>
+
+    <div class="rank-card" data-section="albums" id="pane-albums" role="tabpanel" hidden>
+      <div class="rank-head">
+        <input type="search" id="srch-albums" placeholder="Search albums…" />
+      </div>
+      <div class="podium" id="pod-albums"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Album</span><span class="artist-head">Artist</span>
+          <span class="num-head">Minutes</span>
+        </div>
+        <div id="list-albums"></div>
+      </div>
+    </div>
+
+    <div class="rank-card" data-section="tracks" id="pane-tracks" role="tabpanel" hidden>
+      <div class="rank-head">
+        <input type="search" id="srch-tracks" placeholder="Search tracks…" />
+      </div>
+      <div class="podium" id="pod-tracks"></div>
+      <div class="list">
+        <div class="row head">
+          <span></span><span>Track</span><span class="artist-head">Artist</span>
+          <span class="num-head">Minutes</span>
+        </div>
+        <div id="list-tracks"></div>
+      </div>
+    </div>
+    </section>
+
+    <section id="over-time" class="anchor-section">
+    <div class="section-title">
+      <h2>Over Time</h2>
+      <span>How much you listened, and to whom, as time went on</span>
     </div>
     <div class="chart-stack">
-      <div class="chart-card chart-card--full chart-card--tall">
-        <h3>Minutes by Month</h3>
-        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-month"></canvas></div>
+      <div class="chart-card chart-card--full chart-card--tall" id="trend-card">
+        <div class="race-head">
+          <h3 id="trend-title">Minutes by Month</h3>
+          <div class="seg-group" role="group" aria-labelledby="trend-by-lbl">
+            <span class="seg-label" id="trend-by-lbl">By</span>
+            <div class="seg" id="trend-by">
+              <button type="button" data-v="month" aria-pressed="true">Month</button>
+              <button type="button" data-v="year" aria-pressed="false">Year</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-trend"></canvas></div>
       </div>
-      <div class="chart-card chart-card--full chart-card--tall">
-        <h3>Minutes by Year</h3>
-        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-year"></canvas></div>
+      <div class="chart-card chart-card--full" id="heat-card">
+        <div class="race-head">
+          <h3>Minutes per Day</h3>
+          <div class="heat-nav">
+            <button type="button" class="secondary" id="heat-prev" aria-label="Previous year">‹</button>
+            <span id="heat-year" aria-live="polite"></span>
+            <button type="button" class="secondary" id="heat-next" aria-label="Next year">›</button>
+          </div>
+        </div>
+        <p class="heat-summary" id="heat-summary"></p>
+        <div class="heat-wrap">
+          <div class="heat-host" id="heat-host"></div>
+          <div class="web-tip" id="heat-tip" hidden></div>
+        </div>
+        <div class="heat-legend" id="heat-legend"></div>
       </div>
       <div class="chart-card chart-card--full">
         <div class="race-head">
@@ -116,6 +189,15 @@
         <input type="range" id="race-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />
         <div class="race-ticks" id="race-ticks" aria-hidden="true"></div>
       </div>
+    </div>
+    </section>
+
+    <section id="taste" class="anchor-section">
+    <div class="section-title">
+      <h2>Taste</h2>
+      <span>Your genres, and how the artists you play relate to each other</span>
+    </div>
+    <div class="chart-stack">
       <div class="chart-card chart-card--full" id="river-card" hidden>
         <div class="race-head">
           <h3 id="river-title">Taste River</h3>
@@ -136,29 +218,61 @@
         </div>
         <p class="river-note">The width of a stream is how much you listened to a genre. Each artist you listen to counts towards one genre according to their Last.fm tags.</p>
       </div>
-    </div>
-    </section>
-
-    <section id="heatmap" class="anchor-section">
-    <div class="section-title">
-      <h2>Daily Heatmap</h2>
-      <span>Every day of your listening at a glance</span>
-    </div>
-    <div class="chart-card chart-card--full">
-      <div class="race-head">
-        <h3>Minutes per Day</h3>
-        <div class="heat-nav">
-          <button type="button" class="secondary" id="heat-prev" aria-label="Previous year">‹</button>
-          <span id="heat-year" aria-live="polite"></span>
-          <button type="button" class="secondary" id="heat-next" aria-label="Next year">›</button>
+      <div class="chart-card chart-card--full" id="relate-card">
+        <div class="tabs tabs--card" role="tablist" data-tabs="relate">
+          <button type="button" role="tab" aria-selected="true" aria-controls="pane-web" data-v="web">Artist Web</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="pane-map" data-v="map" id="tab-map">Taste Map</button>
+        </div>
+        <div class="tab-pane" id="pane-web" role="tabpanel">
+          <p class="pane-note">Your top artists in this range, linked by how often you play them together, or by Last.fm similarity.</p>
+          <div class="web-controls">
+            <div class="seg-group" role="group" aria-labelledby="web-count-lbl">
+              <span class="seg-label" id="web-count-lbl">Artists</span>
+              <div class="seg" data-web="count">
+                <button type="button" data-v="25" aria-pressed="false">Top 25</button>
+                <button type="button" data-v="50" aria-pressed="true">Top 50</button>
+                <button type="button" data-v="75" aria-pressed="false">Top 75</button>
+              </div>
+            </div>
+            <div class="seg-group" role="group" aria-labelledby="web-links-lbl">
+              <span class="seg-label" id="web-links-lbl">Linked by</span>
+              <div class="seg" data-web="links">
+                <button type="button" data-v="session" aria-pressed="true" title="Played in the same listening session">Played together</button>
+                <button type="button" data-v="lastfm" aria-pressed="false" title="Similar according to Last.fm">Similar artists</button>
+              </div>
+            </div>
+            <button type="button" class="secondary" id="web-reset">Reset view</button>
+            <span class="web-hint" id="web-hint"></span>
+          </div>
+          <div class="web-stage">
+            <div class="web-host" id="web-host"></div>
+            <div class="web-panel" id="web-panel" hidden></div>
+          </div>
+          <div class="web-legend" id="web-legend"></div>
+          <div class="web-tip" id="web-tip" hidden></div>
+        </div>
+        <div class="tab-pane" id="pane-map" role="tabpanel" hidden>
+          <p class="pane-note">Your top 400 artists, placed so that artists Last.fm calls similar sit together. Play to watch them light up over time.</p>
+          <div class="race-controls">
+            <div class="seg-group" role="group" aria-labelledby="taste-mode-lbl">
+              <span class="seg-label" id="taste-mode-lbl">Show</span>
+              <div class="seg" data-taste="mode">
+                <button type="button" data-v="ever" aria-pressed="true">All so far</button>
+                <button type="button" data-v="recent" aria-pressed="false">Last 30 days</button>
+              </div>
+            </div>
+            <button type="button" class="secondary" id="taste-reset">Reset view</button>
+            <button type="button" id="taste-play" class="push-right">Play</button>
+          </div>
+          <div class="race-host taste-host">
+            <canvas id="c-taste" role="img" aria-label="Map of your top artists arranged by similarity, lighting up over time"></canvas>
+            <div class="web-tip" id="taste-tip" hidden></div>
+          </div>
+          <input type="range" id="taste-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />
+          <div class="race-ticks" id="taste-ticks" aria-hidden="true"></div>
+          <div class="web-legend" id="taste-legend"></div>
         </div>
       </div>
-      <p class="heat-summary" id="heat-summary"></p>
-      <div class="heat-wrap">
-        <div class="heat-host" id="heat-host"></div>
-        <div class="web-tip" id="heat-tip" hidden></div>
-      </div>
-      <div class="heat-legend" id="heat-legend"></div>
     </div>
     </section>
 
@@ -177,145 +291,13 @@
     </div>
     </section>
 
-    <section id="artist-web" class="anchor-section">
-    <div class="section-title">
-      <h2>Artist Web</h2>
-      <span>Top artists linked by how often you play them together, or by Last.fm similarity</span>
-    </div>
-    <div class="chart-card chart-card--full">
-      <div class="web-controls">
-        <div class="seg-group" role="group" aria-labelledby="web-count-lbl">
-          <span class="seg-label" id="web-count-lbl">Artists</span>
-          <div class="seg" data-web="count">
-            <button type="button" data-v="25" aria-pressed="false">Top 25</button>
-            <button type="button" data-v="50" aria-pressed="true">Top 50</button>
-            <button type="button" data-v="75" aria-pressed="false">Top 75</button>
-          </div>
-        </div>
-        <div class="seg-group" role="group" aria-labelledby="web-links-lbl">
-          <span class="seg-label" id="web-links-lbl">Linked by</span>
-          <div class="seg" data-web="links">
-            <button type="button" data-v="session" aria-pressed="true" title="Played in the same listening session">Played together</button>
-            <button type="button" data-v="lastfm" aria-pressed="false" title="Similar according to Last.fm">Similar artists</button>
-          </div>
-        </div>
-        <button type="button" class="secondary" id="web-reset">Reset view</button>
-        <span class="web-hint" id="web-hint"></span>
-      </div>
-      <div class="web-stage">
-        <div class="web-host" id="web-host"></div>
-        <div class="web-panel" id="web-panel" hidden></div>
-      </div>
-      <div class="web-legend" id="web-legend"></div>
-      <div class="web-tip" id="web-tip" hidden></div>
-    </div>
-    </section>
-
-    <section id="taste-map" class="anchor-section" hidden>
-    <div class="section-title">
-      <h2>Taste Map</h2>
-      <span>Your top artists, placed so that artists Last.fm calls similar sit together</span>
-    </div>
-    <div class="chart-card chart-card--full">
-      <div class="race-head">
-        <h3>Where Your Listening Lives</h3>
-        <button type="button" id="taste-play">Play</button>
-      </div>
-      <div class="race-controls">
-        <div class="seg-group" role="group" aria-labelledby="taste-mode-lbl">
-          <span class="seg-label" id="taste-mode-lbl">Show</span>
-          <div class="seg" data-taste="mode">
-            <button type="button" data-v="ever" aria-pressed="true">All so far</button>
-            <button type="button" data-v="recent" aria-pressed="false">Last 30 days</button>
-          </div>
-        </div>
-        <button type="button" class="secondary" id="taste-reset">Reset view</button>
-      </div>
-      <div class="race-host taste-host">
-        <canvas id="c-taste" role="img" aria-label="Map of your top artists arranged by similarity, lighting up over time"></canvas>
-        <div class="web-tip" id="taste-tip" hidden></div>
-      </div>
-      <input type="range" id="taste-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />
-      <div class="race-ticks" id="taste-ticks" aria-hidden="true"></div>
-      <div class="web-legend" id="taste-legend"></div>
-    </div>
-    </section>
-
     <section id="recent-plays" class="anchor-section">
     <div class="section-title">
       <h2>Recently Spun</h2>
-      <span>Your last 10 plays</span>
+      <span>Your last 25 plays</span>
     </div>
-    <div class="rankings-stack" style="max-width:min(920px,100%);margin:0 auto;">
-      <div class="table-card" style="max-width:none;">
-        <div class="table-head">
-          <h3>Recent Plays</h3>
-        </div>
-        <div class="recent-wrap">
-          <table>
-            <thead><tr>
-              <th>Track</th>
-              <th>Artist</th>
-              <th>Album</th>
-              <th class="recent-time-head">Time (Central)</th>
-            </tr></thead>
-            <tbody id="tb-recent"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    </section>
-
-    <section id="rankings" class="anchor-section">
-    <div class="section-title">
-      <h2>Rankings</h2>
-      <span>Your favorite artists, albums, and tracks</span>
-    </div>
-
-    <div class="rank-card" data-section="artists">
-      <div class="rank-head">
-        <h3>Artists</h3>
-        <input type="search" id="srch-artists" placeholder="Search artists…" />
-      </div>
-      <div class="podium" id="pod-artists"></div>
-      <div class="list">
-        <div class="row head">
-          <span></span><span>Name</span>
-          <span class="num-head">Streams</span>
-          <span class="num-head">Minutes</span>
-        </div>
-        <div id="list-artists"></div>
-      </div>
-    </div>
-
-    <div class="rank-card" data-section="albums">
-      <div class="rank-head">
-        <h3>Albums</h3>
-        <input type="search" id="srch-albums" placeholder="Search albums…" />
-      </div>
-      <div class="podium" id="pod-albums"></div>
-      <div class="list">
-        <div class="row head">
-          <span></span><span>Album</span><span class="artist-head">Artist</span>
-          <span class="num-head">Minutes</span>
-        </div>
-        <div id="list-albums"></div>
-      </div>
-    </div>
-
-    <div class="rank-card" data-section="tracks">
-      <div class="rank-head">
-        <h3>Tracks</h3>
-        <input type="search" id="srch-tracks" placeholder="Search tracks…" />
-      </div>
-      <div class="podium" id="pod-tracks"></div>
-      <div class="list">
-        <div class="row head">
-          <span></span><span>Track</span><span class="artist-head">Artist</span>
-          <span class="num-head">Minutes</span>
-        </div>
-        <div id="list-tracks"></div>
-      </div>
+    <div class="chart-card chart-card--full recent-card">
+      <ol class="recent-list" id="recent-list"></ol>
     </div>
     </section>
   </div>
