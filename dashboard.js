@@ -779,6 +779,13 @@ function raceEntities(kind) {
   return (raceEntityCache[kind] = list);
 }
 
+/** Stable line colour: hue from a hash of the entity id, so it never changes with settings. */
+function raceColorOf(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return `hsl(${(h >>> 0) % 360} 68% 42%)`;
+}
+
 function buildRaceData() {
   const lo = dayStrToOff(state.fromDay),
     hi = dayStrToOff(state.toDay);
@@ -817,7 +824,7 @@ function buildRaceData() {
         v[k] = run / 60000;
       }
     }
-    pool.push({ name: e.label, image: e.image, v, shown: new Uint8Array(N) });
+    pool.push({ name: e.label, image: e.image, color: raceColorOf(e.id), v, shown: new Uint8Array(N) });
   }
 
   const maxes = new Float32Array(N);
@@ -837,7 +844,6 @@ function buildRaceData() {
   }
 
   const artists = pool.filter((a) => a.shown.includes(1));
-  artists.forEach((a, i) => (a.color = `hsl(${(i * 137.508) % 360} 68% 42%)`));
   // Start just before the first visible listen instead of at the beginning of the range.
   let first = N - 1;
   for (const a of artists) {
