@@ -4,7 +4,8 @@
 Run: python test_cloud_pull.py
 Verifies that only top-level yearly exports missing locally are downloaded, an
 existing local export is never overwritten, the live buffer and other files are
-ignored, and a bad download leaves no file behind.
+ignored, a bad download leaves no file behind, and the repo's default branch is
+used (falling back to "main" if it can't be looked up).
 """
 
 from __future__ import annotations
@@ -18,12 +19,14 @@ import cloud_pull
 
 
 class FakeResponse:
-    def __init__(self, body=b"", payload=None):
+    def __init__(self, body=b"", payload=None, status=200):
         self.body = body
         self.payload = payload
+        self.status = status
 
     def raise_for_status(self):
-        pass
+        if self.status >= 400:
+            raise cloud_pull.requests.HTTPError(f"{self.status}")
 
     def json(self):
         return self.payload
@@ -42,12 +45,17 @@ def entry(path, sha, body):
     return {"path": path, "type": "blob", "sha": sha, "size": len(body)}
 
 
-def run(tree, blobs, local_files, sizes=None):
+def run(tree, blobs, local_files, branch="main", repo_status=200, trees_seen=None):
     """Run pull_exports against a fake repo; returns (result, local dir contents, requested shas)."""
     requested = []
+    cloud_pull._branch_cache.clear()
 
     def fake_get(url, **_kwargs):
+        if url == cloud_pull.REPO_API.format(repo="me/data"):
+            return FakeResponse(payload={"default_branch": branch}, status=repo_status)
         if "/trees/" in url:
+            if trees_seen is not None:
+                trees_seen.append(url.rsplit("/", 1)[1])
             return FakeResponse(payload={"tree": tree})
         sha = url.rsplit("/", 1)[1]
         requested.append(sha)
@@ -95,6 +103,18 @@ def test_size_mismatch_leaves_no_file():
     (ok, msg), files, _ = run(tree, {"s2020": b"[trunc"}, {})
     assert not ok and "2020" in msg, msg
     assert files == {}, f"partial download left behind: {sorted(files)}"
+
+
+def test_lists_the_default_branch():
+    seen = []
+    (ok, msg), _, _ = run([], {}, {}, branch="master", trees_seen=seen)
+    assert ok and seen == ["master"], (msg, seen)
+
+
+def test_branch_lookup_failure_falls_back_to_main():
+    seen = []
+    (ok, msg), _, _ = run([], {}, {}, branch="master", repo_status=403, trees_seen=seen)
+    assert ok and seen == ["main"], (msg, seen)
 
 
 def test_unconfigured_is_a_no_op():

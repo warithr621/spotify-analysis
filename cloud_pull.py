@@ -26,6 +26,24 @@ LIVE_FILENAME = "Streaming_History_Audio_live.json"
 TOKEN_FILENAME = "live_token.json"
 CONTENTS_API = "https://api.github.com/repos/{repo}/contents/{path}"
 GIT_API = "https://api.github.com/repos/{repo}/git"
+REPO_API = "https://api.github.com/repos/{repo}"
+
+_branch_cache: dict[str, str] = {}
+
+
+def default_branch(repo: str, headers: dict) -> str:
+    """The data repo's default branch (what the Contents API and the Actions checkout use),
+    looked up once per process. Falls back to "main" if the lookup fails, which is what
+    every call used before this lookup existed."""
+    if repo not in _branch_cache:
+        try:
+            r = requests.get(REPO_API.format(repo=repo), headers=headers, timeout=30)
+            r.raise_for_status()
+            _branch_cache[repo] = r.json().get("default_branch") or "main"
+        except (requests.RequestException, ValueError) as e:
+            logger.warning("Could not look up %s's default branch (%s); assuming main.", repo, e)
+            return "main"
+    return _branch_cache[repo]
 
 
 def push_live() -> tuple[bool, str]:
@@ -53,9 +71,10 @@ def push_live() -> tuple[bool, str]:
         "X-GitHub-Api-Version": "2022-11-28",
     }
     base = GIT_API.format(repo=repo)
+    branch = default_branch(repo, headers)
 
     try:
-        r = requests.get(f"{base}/ref/heads/main", headers=headers, timeout=60)
+        r = requests.get(f"{base}/ref/heads/{branch}", headers=headers, timeout=60)
         r.raise_for_status()
         head_sha = r.json()["object"]["sha"]
 
@@ -85,7 +104,7 @@ def push_live() -> tuple[bool, str]:
         r.raise_for_status()
         new_commit_sha = r.json()["sha"]
 
-        r = requests.patch(f"{base}/refs/heads/main", headers=headers, json={
+        r = requests.patch(f"{base}/refs/heads/{branch}", headers=headers, json={
             "sha": new_commit_sha,
         }, timeout=60)
         r.raise_for_status()
@@ -171,8 +190,9 @@ def pull_exports() -> tuple[bool, str]:
         return False, "DATA_REPO / DATA_REPO_TOKEN not set."
     headers = {"Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"}
     base = GIT_API.format(repo=repo)
+    branch = default_branch(repo, {**headers, "Accept": "application/vnd.github+json"})
     try:
-        r = requests.get(f"{base}/trees/main", params={"recursive": "1"}, headers={**headers, "Accept": "application/vnd.github+json"}, timeout=60)
+        r = requests.get(f"{base}/trees/{branch}", params={"recursive": "1"}, headers={**headers, "Accept": "application/vnd.github+json"}, timeout=60)
         r.raise_for_status()
         remote = [
             t for t in r.json().get("tree", [])
