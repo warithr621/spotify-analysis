@@ -23,6 +23,7 @@ python test_merge_dedup.py       # live/export dedup
 python test_artist_sessions.py   # Artist web session splitting
 python test_cloud_pull.py        # pull_exports() only downloads missing exports
 python test_art_sync.py          # art search misses are remembered, not retried
+python test_lastfm.py            # Last.fm tag cleanup and fetch flow (faked Last.fm)
 ```
 
 Spotify refresh requires a Spotify app Client ID. Set it in `.env`:
@@ -44,9 +45,16 @@ DATA_REPO_TOKEN=your_github_pat
 
 `DATA_REPO_TOKEN` needs **Contents: Read and write** permission — it's used both to pull and to push the live buffer back after a local refresh.
 
+For the Taste River's artist tags, also set a read-only Last.fm API key (https://www.last.fm/api/account/create, callback URL blank) and fill the cache once:
+
+```
+LASTFM_API_KEY=your_key
+python lastfm_sync.py    # ~2 requests per top-400 artist, ~3 min; later Rescrapes top up 25 stale artists
+```
+
 ## Architecture
 
-Six Python modules, no database — all state lives in local JSON files.
+Seven Python modules, no database — all state lives in local JSON files.
 
 **`build_dashboard.py`** — data pipeline. Reads all `music-history/Streaming_History_Audio_*.json` files, computes aggregate statistics (per-day/month/year series, top artists/tracks/albums, heatmap, streak, etc.), serializes the result to a JSON bundle, then injects it into `template.html` by replacing the `__DATA_JSON__` placeholder string. Output is `dashboard.html`. This file is auto-rebuilt by `serve.py` whenever source JSON or `template.html` is newer. Also emits `artist_sessions` for the Artist web (see Key conventions).
 
@@ -54,11 +62,13 @@ Six Python modules, no database — all state lives in local JSON files.
 
 **`art_sync.py`** — Fetches real Spotify album art and artist photos for the current top 12 albums/tracks and top 80 artists (by minutes played), for the Rankings podium, the Artist web, and the Top listens race. Uses `/v1/search` (name + artist query) rather than direct id lookups — `/v1/tracks` and `/v1/artists` return 403 under this app's current Spotify API access tier, but Search remains available and returns the same image data. Search's top hit is unreliable (e.g. "aespa" → IVE), so `_search()` fetches 10 results and caches only one whose artist name matches exactly. Reuses `spotify_sync.ensure_access_token()` for auth. Caches results to `art_cache.json` (gitignored), keyed `artist:<lowercased name>` / `album:<canon_album_key>` / `track:<canon_track_key>`. Best-effort like `cloud_pull.py`: failures are logged and returned as `(False, msg)`, never raised, so a refresh never breaks because art couldn't be fetched.
 
+**`lastfm_sync.py`** — Fetches Last.fm `artist.getTopTags` and `artist.getSimilar` for the top `GRAPH_ARTIST_CAP` (400) artists by minutes and caches them in `lastfm_cache.json` (gitignored), keyed `artist:<lowercased name>` → `{name, tags, similar: [[name, match], ...], fetched}`. Only an API key is needed (`LASTFM_API_KEY`), no login flow. Tags are cleaned by `clean_tags()` (blacklisted generic tags, bare years and the artist's own name dropped; top `MAX_TAGS` (5) with weight ≥ `MIN_TAG_COUNT` (20)). Entries refresh after 30 days; unknown artists get an empty entry so they aren't re-requested. Requests go through 4 threads behind a shared ~5 req/s limiter. `python lastfm_sync.py` fills everything; Rescrape fetches at most `BATCH_LIMIT` (25) missing/stale artists. `build_dashboard.py` reads the cache read-only via `load_lastfm_cache()` and attaches `tags` to each artist entry that has them (the similar lists aren't used by the dashboard yet). Best-effort like `art_sync.py`: returns `(False, msg)` and never raises; skipped when `LASTFM_API_KEY` is unset.
+
 **`serve.py`** — Flask server. Every rebuild goes through `rebuild_dashboard()`, which `importlib.reload`s `build_dashboard` first so a long-running server never builds with stale code (edits to `serve.py` itself, `art_sync.py`, etc. still need a server restart). On startup it exits with an error if something already accepts connections on `HOST:PORT`, so duplicate servers can't share requests. Routes:
 - `GET /` — serves `dashboard.html`, triggering a rebuild if stale
 - `GET /callback` — receives the OAuth code from Spotify and puts it on `oauth_code_queue`
 - `POST /api/pull` — pulls any missing yearly exports and then the live buffer from the data repo (if configured), then rebuilds the dashboard. Does NOT call the Spotify API. Triggered by the "Refresh" button.
-- `POST /api/refresh` — always runs `cloud_pull.pull_exports()` and `cloud_pull.pull_live()` (if configured), then `spotify_sync.sync_incremental()`, then `art_sync.refresh_art_cache()`, then `rebuild_dashboard()`, then `cloud_pull.push_live()` (if configured), under a combined threading lock + PID-based file lock (`.refresh.lock`). Operates locally even without cloud credentials. Triggered by the "Rescrape" button.
+- `POST /api/refresh` — always runs `cloud_pull.pull_exports()` and `cloud_pull.pull_live()` (if configured), then `spotify_sync.sync_incremental()`, then `art_sync.refresh_art_cache()`, then `lastfm_sync.refresh_cache()`, then `rebuild_dashboard()`, then `cloud_pull.push_live()` (if configured), under a combined threading lock + PID-based file lock (`.refresh.lock`). Operates locally even without cloud credentials. Triggered by the "Rescrape" button.
 - `POST /api/authorize` — forces a fresh Spotify PKCE login, stores the new refresh token locally, and pushes it to the data repo. Triggered by the "Re-authorize" button.
 - `GET /api/refresh/status` — reads `.refresh.last.json` for last refresh result
 

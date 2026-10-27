@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_file
 
 import art_sync
+import lastfm_sync
 import build_dashboard
 import cloud_pull
 import spotify_sync
@@ -283,6 +284,15 @@ def api_refresh():
                 logger.warning("Art cache refresh: %s", art_msg)
         except Exception:
             logger.exception("Art cache refresh crashed (non-fatal)")
+
+        # Tags + similar artists from Last.fm (a small batch per refresh; run
+        # `python lastfm_sync.py` for the full first fill). Also best-effort.
+        try:
+            lf_ok, lf_msg = lastfm_sync.refresh_cache()
+            if not lf_ok:
+                logger.info("Last.fm refresh: %s", lf_msg)
+        except Exception:
+            logger.exception("Last.fm refresh crashed (non-fatal)")
 
         try:
             rebuild_dashboard()

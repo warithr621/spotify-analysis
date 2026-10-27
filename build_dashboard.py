@@ -24,6 +24,7 @@ TEMPLATE = BASE / "template.html"
 OUT_HTML = BASE / "dashboard.html"
 AUDIO_GLOB = "Streaming_History_Audio_*.json"
 ART_CACHE_PATH = BASE / "art_cache.json"
+LASTFM_CACHE_PATH = BASE / "lastfm_cache.json"
 
 # Artist relationship graph: artists are "related" when they show up in the same
 # listening session. Only the top GRAPH_ARTIST_CAP artists (by minutes) are
@@ -192,6 +193,16 @@ def load_art_cache() -> dict:
     colored initial tile, so this never raises."""
     try:
         with open(ART_CACHE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def load_lastfm_cache() -> dict:
+    """Read-only lookup into lastfm_cache.json (populated by lastfm_sync.py).
+    Missing or unparsable just means no tags yet; never raises."""
+    try:
+        with open(LASTFM_CACHE_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}
@@ -423,20 +434,23 @@ def main() -> None:
         ]
 
     art_cache = load_art_cache()
+    lastfm_cache = load_lastfm_cache()
 
     top_artists = sorted(artist_ms.keys(), key=lambda a: (-artist_ms[a], a.lower()))
     artists_out = []
     for a in top_artists:
         days_raw = artist_daily[a]
-        artists_out.append(
-            {
-                "name": a,
-                "ms": artist_ms[a],
-                "n": artist_n[a],
-                "image": art_cache.get(f"artist:{a.lower()}"),
-                "days": compact_days(days_raw),
-            }
-        )
+        entry = {
+            "name": a,
+            "ms": artist_ms[a],
+            "n": artist_n[a],
+            "image": art_cache.get(f"artist:{a.lower()}"),
+            "days": compact_days(days_raw),
+        }
+        tags = (lastfm_cache.get(f"artist:{a.lower()}") or {}).get("tags")
+        if tags:
+            entry["tags"] = tags
+        artists_out.append(entry)
 
     graph_artists = top_artists[:GRAPH_ARTIST_CAP]
     artist_sessions = build_artist_sessions(

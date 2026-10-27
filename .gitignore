@@ -49,3 +49,4 @@ spotify_tokens.json
 dashboard.html
 music-history/Streaming_History_Audio_*.json
 art_cache.json
+lastfm_cache.json

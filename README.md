@@ -32,6 +32,17 @@ This is necessary for the "refresh" feature, which allows you to fetch newer Spo
 SPOTIFY_CLIENT_ID=your_client_id_here
 ```
 
+### Last.fm (optional)
+
+The Taste River colours your listening by genre using artist tags from Last.fm. To turn it on, create an API account at [last.fm/api/account/create](https://www.last.fm/api/account/create) (leave the callback URL blank), add the API key to `.env`, and fill the cache once (about 3 minutes for 400 artists):
+
+```bash
+LASTFM_API_KEY=your_key
+python lastfm_sync.py
+```
+
+After that, **Rescrape** keeps the cache topped up a few artists at a time.
+
 ## Run the app
 
 Start the local server:
@@ -49,7 +60,7 @@ http://127.0.0.1:8765/
 From the dashboard, three buttons are available in the top-right corner:
 - **Re-authorize** — run the Spotify OAuth flow and store a new refresh token
 - **Refresh** — pull the latest data from the cloud data repo and rebuild the dashboard (no Spotify API call)
-- **Rescrape** — fetch new plays from Spotify, fetch album art and artist photos for your top artists/albums/tracks, push the new plays to the cloud data repo, and rebuild the dashboard
+- **Rescrape** — fetch new plays from Spotify, fetch album art and artist photos for your top artists/albums/tracks, top up Last.fm tags (if configured), push the new plays to the cloud data repo, and rebuild the dashboard
 
 # Extended History
 
