@@ -764,17 +764,18 @@ function raceUnit(i) {
 }
 
 const raceEntityCache = {};
-/** Rankable things of one kind, normalised to {id, label, artist, image, days}. */
+/** Rankable things of one kind, normalised to {id, label, by, image, days}; `by` is the
+ *  artist shown after a track/album title ("Title · Artist"), absent for artists. */
 function raceEntities(kind) {
   if (raceEntityCache[kind]) return raceEntityCache[kind];
   const artistImg = new Map(DATA.artists.map((a) => [a.name, a.image]));
   let list;
   if (kind === "tracks") {
-    list = DATA.tracks.map((t) => ({ id: t.key, label: t.title, artist: t.artist, image: t.image || artistImg.get(t.artist), days: t.days }));
+    list = DATA.tracks.map((t) => ({ id: t.key, label: t.title, by: t.artist, image: t.image || artistImg.get(t.artist), days: t.days }));
   } else if (kind === "albums") {
-    list = DATA.albums.map((al) => ({ id: al.key, label: al.album, artist: al.artist, image: al.image || artistImg.get(al.artist), days: al.days }));
+    list = DATA.albums.map((al) => ({ id: al.key, label: al.album, by: al.artist, image: al.image || artistImg.get(al.artist), days: al.days }));
   } else {
-    list = DATA.artists.map((a) => ({ id: a.name, label: a.name, artist: a.name, image: a.image, days: a.days }));
+    list = DATA.artists.map((a) => ({ id: a.name, label: a.name, image: a.image, days: a.days }));
   }
   return (raceEntityCache[kind] = list);
 }
@@ -824,7 +825,7 @@ function buildRaceData() {
         v[k] = run / 60000;
       }
     }
-    pool.push({ name: e.label, image: e.image, color: raceColorOf(e.id), v, shown: new Uint8Array(N) });
+    pool.push({ name: e.label, by: e.by, image: e.image, color: raceColorOf(e.id), v, shown: new Uint8Array(N) });
   }
 
   const maxes = new Float32Array(N);
@@ -935,7 +936,7 @@ function drawRace() {
     frac = t - d;
   const fs = Math.max(11, Math.min(16, w / 62));
   const x0 = Math.min(64, w * 0.09),
-    x1 = w - Math.min(260, w * 0.28);
+    x1 = w - Math.min(300, w * 0.3); // room for "Title · Artist" labels
   const yTop = Math.max(70, h * 0.17),
     yBot = h - 34;
   const pw = x1 - x0,
@@ -1072,7 +1073,7 @@ function drawRace() {
       ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
       ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
-      ctx.fillText((L.a.name.trim()[0] || "?").toUpperCase(), cx, cy + 1);
+      ctx.fillText(((L.a.by || L.a.name).trim()[0] || "?").toUpperCase(), cx, cy + 1);
       ctx.textAlign = "left";
     }
     ctx.restore();
@@ -1082,11 +1083,18 @@ function drawRace() {
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = L.a.color;
     const val = `  ${fmtNum(L.val)}`;
+    const by = L.a.by ? ` · ${L.a.by}` : "";
+    const fits = (s) => ctx.measureText(s + val).width <= maxLabelW;
+    // Shorten the title before the artist, so "Title… · Artist" stays recognisable.
     let name = L.a.name;
-    while (name.length > 3 && ctx.measureText(name + val).width > maxLabelW) name = name.slice(0, -2).trimEnd() + "…";
-    ctx.fillText(name + val, cx + R + 8, cy);
+    while (name.length > 6 && !fits(name + by)) name = name.slice(0, -2).trimEnd() + "…";
+    let label = name + by;
+    while (label.length > 4 && !fits(label)) label = label.slice(0, -2).trimEnd() + "…";
+    ctx.fillStyle = L.a.color;
+    ctx.fillText(label, cx + R + 8, cy);
+    ctx.fillStyle = c.muted;
+    ctx.fillText(val, cx + R + 8 + ctx.measureText(label).width, cy);
   }
 
   // Axes + title + big date.
