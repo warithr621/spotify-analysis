@@ -791,15 +791,16 @@ function buildRaceData() {
   const pool = [];
   for (const e of raceEntities(race.kind).slice(0, RACE_POOL[race.kind])) {
     const dense = new Float64Array(N + pad); // index 0 = day (lo - pad)
-    let any = false;
+    let any = false,
+      before = 0; // "All time" also counts listening from before the selected range
     for (const [i, ms] of e.days) {
       const j = i - (lo - pad);
       if (j >= 0 && j < dense.length) {
         dense[j] += ms;
         any = true;
-      }
+      } else if (!trail && j < 0) before += ms;
     }
-    if (!any) continue;
+    if (!any && !before) continue;
     const v = new Float32Array(N);
     let run = 0;
     if (trail) {
@@ -810,6 +811,7 @@ function buildRaceData() {
         run -= dense[k];
       }
     } else {
+      run = before;
       for (let k = 0; k < N; k++) {
         run += dense[k];
         v[k] = run / 60000;
