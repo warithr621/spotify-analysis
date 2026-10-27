@@ -80,45 +80,35 @@
         <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-year"></canvas></div>
       </div>
       <div class="chart-card chart-card--full">
-        <div class="anim-head">
+        <div class="race-head">
           <h3>Top listens over time</h3>
-          <div class="anim-controls">
-            <button type="button" id="race-play">Play</button>
-            <button type="button" class="secondary" id="race-restart">Restart</button>
-            <select id="race-kind" aria-label="What to rank">
-              <option value="artists" selected>Artists</option>
-              <option value="tracks">Tracks</option>
-              <option value="albums">Albums</option>
-            </select>
-            <select id="race-trail" aria-label="Minutes counted over">
-              <option value="7">Last 7 days</option>
-              <option value="30" selected>Last 30 days</option>
-              <option value="90">Last 90 days</option>
-              <option value="0">All time</option>
-            </select>
-            <select id="race-speed" aria-label="Playback speed">
-              <option value="20">Slow</option>
-              <option value="60" selected>Normal</option>
-              <option value="150">Fast</option>
-              <option value="400">Very fast</option>
-            </select>
-            <select id="race-window" aria-label="Visible time window">
-              <option value="28">4 weeks</option>
-              <option value="84" selected>12 weeks</option>
-              <option value="364">1 year</option>
-              <option value="0">Whole range</option>
-            </select>
-          </div>
+          <button type="button" id="race-play">Play</button>
         </div>
-        <div class="race-filter">
-          <select id="race-fmode" aria-label="Artist filter mode">
-            <option value="only" selected>Only show artist</option>
-            <option value="hide">Hide artist</option>
-          </select>
-          <input id="race-artist-input" list="race-artist-dl" type="search" placeholder="Filter by artist…" />
-          <datalist id="race-artist-dl"></datalist>
-          <div class="race-chips" id="race-chips"></div>
-          <button type="button" class="secondary" id="race-clear" hidden>Clear</button>
+        <div class="race-controls">
+          <div class="seg-group" role="group" aria-labelledby="race-kind-lbl">
+            <span class="seg-label" id="race-kind-lbl">Rank</span>
+            <div class="seg" data-race="kind">
+              <button type="button" id="race-kind-artists" data-v="artists" aria-pressed="true">Artists</button>
+              <button type="button" id="race-kind-tracks" data-v="tracks" aria-pressed="false">Tracks</button>
+              <button type="button" id="race-kind-albums" data-v="albums" aria-pressed="false">Albums</button>
+            </div>
+          </div>
+          <div class="seg-group" role="group" aria-labelledby="race-trail-lbl">
+            <span class="seg-label" id="race-trail-lbl">Counted over</span>
+            <div class="seg" data-race="trail">
+              <button type="button" id="race-trail-7" data-v="7" aria-pressed="false">7 days</button>
+              <button type="button" id="race-trail-30" data-v="30" aria-pressed="true">30 days</button>
+              <button type="button" id="race-trail-all" data-v="0" aria-pressed="false">All time</button>
+            </div>
+          </div>
+          <div class="seg-group" role="group" aria-labelledby="race-win-lbl">
+            <span class="seg-label" id="race-win-lbl">View</span>
+            <div class="seg" data-race="win">
+              <button type="button" id="race-win-3m" data-v="91" aria-pressed="false">3 months</button>
+              <button type="button" id="race-win-1y" data-v="365" aria-pressed="true">1 year</button>
+              <button type="button" id="race-win-all" data-v="0" aria-pressed="false">All</button>
+            </div>
+          </div>
         </div>
         <div class="race-host"><canvas id="c-race" role="img" aria-label="Animated line graph of top artists' minutes over time"></canvas></div>
         <input type="range" id="race-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />

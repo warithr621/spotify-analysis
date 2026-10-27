@@ -682,9 +682,22 @@ footer {
 #refresh-msg.err { color: var(--danger); }
 
 /* ---------- Animated line + artist web ---------- */
-.anim-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; }
-.anim-head h3 { margin-bottom: 0.4rem; }
-.anim-controls { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+.race-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.7rem; }
+.race-head h3 { margin: 0; }
+#race-play { min-width: 5.6rem; }
+.race-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem; margin-bottom: 0.8rem; }
+.seg-group { display: flex; align-items: center; gap: 0.5rem; }
+.seg-label { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; overflow: hidden; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+.seg button { padding: 0.36rem 0.7rem; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 0.82rem; font-weight: 600; }
+.seg button + button { border-left: 1px solid var(--border-soft); }
+.seg button:hover:not(:disabled) { transform: none; background: var(--accent-soft); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-fuchsia); }
+.seg button:focus-visible { outline: 2px solid var(--accent-fuchsia); outline-offset: -2px; }
+@media (max-width: 560px) {
+  .race-controls { gap: 0.5rem 0.9rem; }
+  .seg button { padding: 0.34rem 0.5rem; font-size: 0.78rem; }
+}
 
 .web-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; color: var(--muted); font-size: 0.85rem; }
 .web-host { position: relative; width: 100%; overflow: hidden; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--card-hover); cursor: grab; }
@@ -712,17 +725,7 @@ footer {
 .web-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 0.4rem; border-radius: 50%; vertical-align: -1px; }
 #artist-web .chart-card { position: relative; }
 .web-controls select { width: auto; }
-.anim-controls select { width: auto; }
 .race-host { position: relative; width: 100%; height: clamp(360px, 52vw, 620px); border-radius: var(--radius); overflow: hidden; background: #12061f; }
 .race-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #race-scrub { width: 100%; margin: 0.7rem 0 0.3rem; accent-color: var(--accent-fuchsia); }
-.race-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.7rem; }
-.race-filter select { width: auto; }
-.race-filter input[type="search"] { flex: 0 1 240px; min-width: 150px; }
-.race-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.15rem 0.15rem 0.2rem; border: 1px solid var(--border); border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 0.8rem; }
-.chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
-.chip:not(:has(img)) { padding-left: 0.6rem; }
-.chip button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 1rem; line-height: 1; box-shadow: none; }
-.chip button:hover:not(:disabled) { background: rgba(42, 10, 74, 0.12); transform: none; }
 .race-ticks { display: flex; justify-content: space-between; margin: 0 0.3rem 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }

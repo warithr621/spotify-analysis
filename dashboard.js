@@ -721,7 +721,7 @@ const prefersReducedMotion = () =>
 
 const RACE_TOP = 10;
 const RACE_LEAD_DAYS = 3; // empty days kept before the first listen when auto-trimming the start
-const RACE_TOP_MAX = 15; // most lines shown when filtering to chosen artists
+const RACE_PLAY_SECONDS = 22; // playback length for the whole range, whatever its span
 // Candidates considered per kind (top by total minutes); tracks need a deeper pool
 // because a track can top a 30-day window without ranking high all-time.
 const RACE_POOL = { artists: 400, albums: 700, tracks: 1500 };
@@ -733,11 +733,9 @@ const race = {
   playing: false,
   raf: 0,
   last: 0,
-  speed: 60, // days per second
   kind: "artists", // what is ranked: artists | albums | tracks
   trail: 30, // trailing-window length in days; 0 = all time (cumulative)
-  filter: { mode: "only", names: new Set() }, // artist filter ("only" these / "hide" these)
-  win: 84, // days visible on the x-axis
+  win: 365, // days visible on the x-axis; 0 = the whole range
   pending: false,
   scrubbing: false, // user is dragging the slider
   observer: null,
@@ -781,16 +779,6 @@ function raceEntities(kind) {
   return (raceEntityCache[kind] = list);
 }
 
-/** Entities feeding the race, after applying the artist filter. */
-function raceSource() {
-  const { mode, names } = race.filter;
-  const all = raceEntities(race.kind);
-  const cap = RACE_POOL[race.kind];
-  if (!names.size) return all.slice(0, cap);
-  if (mode === "only") return all.filter((e) => names.has(e.artist)).slice(0, cap * 2);
-  return all.filter((e) => !names.has(e.artist)).slice(0, cap);
-}
-
 function buildRaceData() {
   const lo = dayStrToOff(state.fromDay),
     hi = dayStrToOff(state.toDay);
@@ -798,11 +786,10 @@ function buildRaceData() {
   if (!(N >= 2)) return null;
   const trail = race.trail;
   const pad = trail ? trail - 1 : 0;
-  const { mode, names } = race.filter;
-  const top = race.kind === "artists" && mode === "only" && names.size ? Math.min(names.size, RACE_TOP_MAX) : RACE_TOP;
+  const top = RACE_TOP;
 
   const pool = [];
-  for (const e of raceSource()) {
+  for (const e of raceEntities(race.kind).slice(0, RACE_POOL[race.kind])) {
     const dense = new Float64Array(N + pad); // index 0 = day (lo - pad)
     let any = false;
     for (const [i, ms] of e.days) {
@@ -1149,7 +1136,8 @@ function raceFrame(now) {
   const dt = Math.min((now - race.last) / 1000, 0.1);
   race.last = now;
   const end = race.data.N - 1;
-  race.t = Math.min(end, race.t + race.speed * dt);
+  const speed = Math.max(1, end - race.data.start) / RACE_PLAY_SECONDS; // days per second
+  race.t = Math.min(end, race.t + speed * dt);
   if (race.t >= end) race.playing = false;
   drawRace();
   raceSyncControls();
@@ -1206,7 +1194,7 @@ function renderRace() {
   }
 }
 
-/** Rebuild after a kind/trail/filter change, keeping the current position and play state. */
+/** Rebuild after a kind/trail change, keeping the current position and play state. */
 function raceRebuild() {
   const t = race.t;
   race.data = buildRaceData();
@@ -1217,70 +1205,20 @@ function raceRebuild() {
   raceRenderTicks();
 }
 
-function renderRaceChips() {
-  const host = document.getElementById("race-chips");
-  const byName = new Map(DATA.artists.map((a) => [a.name, a]));
-  host.innerHTML = [...race.filter.names]
-    .map((n) => {
-      const img = byName.get(n)?.image;
-      return `<span class="chip">${img ? `<img src="${escAttr(img)}" alt="" />` : ""}${escHtml(n)}` +
-        `<button type="button" data-name="${escAttr(n)}" aria-label="Remove ${escAttr(n)}">×</button></span>`;
-    })
-    .join("");
-  document.getElementById("race-clear").hidden = race.filter.names.size === 0;
-}
-
 function wireRaceControls() {
-  const input = document.getElementById("race-artist-input");
-  document.getElementById("race-artist-dl").innerHTML = DATA.artists
-    .slice(0, 1000)
-    .map((a) => `<option value="${escAttr(a.name)}"></option>`)
-    .join("");
-  const addArtist = () => {
-    const name = input.value.trim();
-    if (!DATA.artists.some((a) => a.name === name)) return;
-    race.filter.names.add(name);
-    input.value = "";
-    renderRaceChips();
-    raceRebuild();
-  };
-  input.addEventListener("input", addArtist); // fires when a datalist option is picked
-  input.addEventListener("keydown", (e) => e.key === "Enter" && addArtist());
-  document.getElementById("race-chips").addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-name]");
-    if (!btn) return;
-    race.filter.names.delete(btn.dataset.name);
-    renderRaceChips();
-    raceRebuild();
+  // Button groups (Rank / Counted over / View): data-race names the race setting, data-v its value.
+  document.querySelectorAll(".seg[data-race]").forEach((seg) => {
+    seg.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-v]");
+      if (!btn) return;
+      seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      const key = seg.dataset.race;
+      race[key] = key === "kind" ? btn.dataset.v : +btn.dataset.v;
+      if (key === "win") drawRace(); // the visible window only changes the drawing
+      else raceRebuild();
+    });
   });
-  document.getElementById("race-clear").addEventListener("click", () => {
-    race.filter.names.clear();
-    renderRaceChips();
-    raceRebuild();
-  });
-  document.getElementById("race-fmode").addEventListener("change", (e) => {
-    race.filter.mode = e.target.value;
-    raceRebuild();
-  });
-  document.getElementById("race-trail").addEventListener("change", (e) => {
-    race.trail = +e.target.value;
-    raceRebuild();
-  });
-  document.getElementById("race-kind").addEventListener("change", (e) => {
-    race.kind = e.target.value;
-    raceRebuild();
-  });
-  renderRaceChips();
-
-  race.speed = +document.getElementById("race-speed").value;
-  race.win = +document.getElementById("race-window").value;
   document.getElementById("race-play").addEventListener("click", () => (race.playing ? racePause() : racePlay(false)));
-  document.getElementById("race-restart").addEventListener("click", () => racePlay(true));
-  document.getElementById("race-speed").addEventListener("change", (e) => (race.speed = +e.target.value));
-  document.getElementById("race-window").addEventListener("change", (e) => {
-    race.win = +e.target.value;
-    drawRace();
-  });
   document.getElementById("race-scrub").addEventListener("input", (e) => {
     race.pending = false;
     race.t = +e.target.value;
