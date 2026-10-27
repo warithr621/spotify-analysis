@@ -284,6 +284,7 @@ function renderCharts() {
   renderRiver();
   renderHeatmap();
   renderArtistWeb();
+  renderTasteMap();
 }
 
 let qArtists='', qAlbums='', qTracks='';
@@ -535,6 +536,7 @@ function bootstrap(){
   wireRiver();
   wireHeatmap();
   wireWebControls();
+  wireTasteMap();
   document.getElementById('artist-input').addEventListener('change', renderArtistChart);
   document.getElementById('artist-input').addEventListener('keyup', renderArtistChart);
 
@@ -1166,10 +1168,12 @@ function raceSyncControls() {
   document.getElementById("race-play").textContent = race.playing ? "Pause" : race.t >= N - 1 ? "Replay" : "Play";
 }
 
-/** Date labels under the slider, spanning the (trimmed) playable range. */
 function raceRenderTicks() {
-  const el = document.getElementById("race-ticks");
-  const data = race.data;
+  renderDateTicks(document.getElementById("race-ticks"), race.data);
+}
+
+/** Date labels under a slider, spanning the (trimmed) playable range `data.start..data.N - 1`. */
+function renderDateTicks(el, data) {
   if (!data) {
     el.innerHTML = "";
     return;
@@ -1908,6 +1912,445 @@ function wireWebControls() {
       if (w && w !== lastW) { lastW = w; renderArtistWeb(); }
     }, 250);
   });
+}
+
+/* ---------- Taste map (canvas) ----------
+ * The top GRAPH_ARTIST_CAP artists laid out once by Last.fm similarity (d3 force, run to rest), so
+ * similar artists sit together, coloured by genre. Playing through time lights the map up: everything
+ * heard so far ("ever") or only what you played in the trailing TASTE_TRAIL_DAYS ("recent"). */
+
+const TASTE_TRAIL_DAYS = 30;
+const TASTE_NAMES = 14; // biggest lit artists that get a name
+
+const taste = {
+  layout: null, // { nodes, regions, legend, minX..maxY }, built once (doesn't depend on the date range)
+  data: null,   // per-range series from buildTasteData()
+  mode: "ever", // ever | recent
+  t: 0,
+  playing: false,
+  scrubbing: false,
+  raf: 0,
+  last: 0,
+  zoom: { k: 1, x: 0, y: 0 }, // pan/zoom on top of the fitted view
+  hover: -1,
+  ctx: null,
+  w: 0,
+  h: 0,
+  view: null,
+  waiting: null, // IntersectionObserver until the layout has been computed
+};
+
+const tasteAvailable = () => typeof d3 !== "undefined" && (DATA.lastfm_links || []).length > 0;
+
+/** Keep each artist's `k` strongest links: drops the noisy tail of weak similarities. */
+function pruneLinks(links, k) {
+  const by = new Map();
+  links.forEach((l, idx) => {
+    for (const e of [l[0], l[1]]) (by.get(e) || by.set(e, []).get(e)).push(idx);
+  });
+  const keep = new Set();
+  for (const ks of by.values()) {
+    ks.sort((a, b) => links[b][2] - links[a][2]);
+    ks.slice(0, k).forEach((i) => keep.add(i));
+  }
+  return links.filter((_, i) => keep.has(i));
+}
+
+/** Force layout over Last.fm similarity (plus a weak same-genre chain so genres don't fray apart). */
+function tasteLayout() {
+  if (taste.layout) return taste.layout;
+  const nodes = (DATA.graph_artists || []).map((name, i) => {
+    const a = DATA.artists[i]; // graph_artists is the head of DATA.artists, in the same order
+    return { i, name, g: a.g ?? -1, ms: a.ms };
+  });
+  const links = pruneLinks(DATA.lastfm_links || [], 15);
+  const byGenre = new Map();
+  for (const n of nodes) if (n.g >= 0) (byGenre.get(n.g) || byGenre.set(n.g, []).get(n.g)).push(n);
+  for (const g of byGenre.values()) for (let k = 1; k < g.length; k++) links.push([g[k].i, g[k - 1].i, 0.12]);
+
+  const deg = new Int32Array(nodes.length);
+  for (const l of links) { deg[l[0]]++; deg[l[1]]++; }
+  const sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links.map((l) => ({ source: l[0], target: l[1], w: l[2] })))
+      .distance((l) => 8 + 40 * (1 - l.w))
+      // Divided by the smaller degree (d3's own default) so hub artists don't collapse the map.
+      .strength((l) => (2.5 * (0.3 + 0.7 * l.w)) / Math.min(deg[l.source.index], deg[l.target.index])))
+    // Short-range repulsion and a firm pull to the centre keep small, loosely linked clusters
+    // (classical, say) from drifting off and shrinking the rest of the map.
+    .force("charge", d3.forceManyBody().strength(-50).distanceMax(150))
+    .force("collide", d3.forceCollide(5))
+    .force("x", d3.forceX(0).strength(0.1))
+    .force("y", d3.forceY(0).strength(0.1))
+    .stop();
+  sim.tick(300);
+
+  // Each genre's label sits at the minutes-weighted centre of its artists.
+  const regions = [...byGenre].map(([g, ns]) => {
+    const w = ns.reduce((s, n) => s + n.ms, 0) || 1;
+    return { g, name: DATA.genres[g], count: ns.length, x: ns.reduce((s, n) => s + n.x * n.ms, 0) / w, y: ns.reduce((s, n) => s + n.y * n.ms, 0) / w };
+  }).filter((r) => r.count >= 6).sort((a, b) => b.count - a.count);
+
+  // Fit to the 1st-99th percentile so a few far-flung artists don't shrink the map (pan to reach them).
+  const pct = (arr, p) => [...arr].sort((a, b) => a - b)[Math.floor((arr.length - 1) * p)];
+  const xs = nodes.map((n) => n.x), ys = nodes.map((n) => n.y);
+  const legend = [...byGenre.keys()].sort((a, b) => a - b);
+  return (taste.layout = { nodes, regions, legend, hasNoGenre: nodes.some((n) => n.g < 0),
+    minX: pct(xs, 0.01), maxX: pct(xs, 0.99), minY: pct(ys, 0.01), maxY: pct(ys, 0.99) });
+}
+
+/** Sparse per-artist minutes inside the date range: day offsets plus running totals. */
+function buildTasteData() {
+  const L = tasteLayout();
+  const lo = dayStrToOff(state.fromDay), hi = dayStrToOff(state.toDay);
+  const N = hi - lo + 1;
+  if (!(N >= 2)) return null;
+  const K = L.nodes.length;
+  const days = new Array(K), cum = new Array(K);
+  const first = new Float64Array(K).fill(Infinity);
+  const buckets = new Array(N); // per day: [artist, minutes, artist, minutes, ...]
+  let firstAny = N - 1, maxEver = 1;
+  for (let k = 0; k < K; k++) {
+    const dd = [], cc = [];
+    let run = 0;
+    for (const row of DATA.artists[k].days) {
+      const d = row[0] - lo;
+      if (d < 0) continue;
+      if (d >= N) break;
+      run += row[1] / 60000;
+      dd.push(d);
+      cc.push(run);
+      (buckets[d] || (buckets[d] = [])).push(k, row[1] / 60000);
+    }
+    days[k] = Int32Array.from(dd);
+    cum[k] = Float32Array.from(cc);
+    if (dd.length) {
+      first[k] = dd[0];
+      firstAny = Math.min(firstAny, dd[0]);
+    }
+    maxEver = Math.max(maxEver, run);
+  }
+  // Busiest trailing-30-day total any artist reached, so "Last 30 days" dot sizes share one scale.
+  const tw = new Float64Array(K);
+  let maxRecent = 1;
+  for (let d = 0; d < N; d++) {
+    const old = buckets[d - TASTE_TRAIL_DAYS];
+    if (old) for (let j = 0; j < old.length; j += 2) tw[old[j]] -= old[j + 1];
+    const cur = buckets[d];
+    if (cur) for (let j = 0; j < cur.length; j += 2) maxRecent = Math.max(maxRecent, (tw[cur[j]] += cur[j + 1]));
+  }
+  return { N, lo, start: Math.max(0, firstAny - RACE_LEAD_DAYS), days, cum, first, maxEver, maxRecent };
+}
+
+/** Minutes through (fractional) day x for artist k, eased across the next day. */
+function tasteCum(data, k, x) {
+  const dd = data.days[k], n = dd.length;
+  if (!n) return 0;
+  const cc = data.cum[k];
+  const fx = Math.floor(x), frac = x - fx;
+  let lo = 0, hi = n; // rows with day <= fx
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (dd[mid] <= fx) lo = mid + 1;
+    else hi = mid;
+  }
+  const P = lo ? cc[lo - 1] : 0;
+  const next = lo < n && dd[lo] === fx + 1 ? cc[lo] - P : 0;
+  return P + next * frac;
+}
+
+const tasteValue = (data, k, t) =>
+  taste.mode === "ever" ? tasteCum(data, k, t) : tasteCum(data, k, t) - tasteCum(data, k, t - TASTE_TRAIL_DAYS);
+
+function tasteResize() {
+  const canvas = document.getElementById("c-taste");
+  const host = canvas.parentElement;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  taste.w = host.clientWidth;
+  taste.h = host.clientHeight;
+  canvas.width = Math.round(taste.w * dpr);
+  canvas.height = Math.round(taste.h * dpr);
+  taste.ctx = canvas.getContext("2d");
+  taste.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const L = taste.layout;
+  if (!L) return;
+  const padX = 50, top = 70, bottom = 24;
+  const s = Math.min((taste.w - 2 * padX) / Math.max(1, L.maxX - L.minX), (taste.h - top - bottom) / Math.max(1, L.maxY - L.minY));
+  taste.view = { s, ox: taste.w / 2 - ((L.minX + L.maxX) / 2) * s, oy: top + (taste.h - top - bottom) / 2 - ((L.minY + L.maxY) / 2) * s };
+}
+
+/** Layout coords -> canvas px, with the pan/zoom applied. */
+function tasteXY(p) {
+  const v = taste.view, z = taste.zoom;
+  return [(p.x * v.s + v.ox) * z.k + z.x, (p.y * v.s + v.oy) * z.k + z.y];
+}
+
+function drawTaste() {
+  const ctx = taste.ctx, data = taste.data;
+  if (!ctx) return;
+  const { w, h } = taste;
+  const c = raceColors();
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = c.bg;
+  ctx.fillRect(0, 0, w, h);
+  if (!data || !taste.view) return;
+
+  const L = taste.layout;
+  const zs = Math.max(1, Math.min(3, Math.sqrt(taste.zoom.k))); // dots grow gently with zoom
+  const t = Math.min(Math.max(taste.t, data.start), data.N - 1);
+  const ever = taste.mode === "ever";
+  const maxVal = ever ? data.maxEver : data.maxRecent;
+  const fs = Math.max(11, Math.min(14, w / 70));
+  const color = (n) => (n.g >= 0 ? genreColor(n.g) : WEB_NO_GENRE);
+
+  // Genre names sit faintly *behind* the dots, at their region's centre, once a few of its artists are lit,
+  // so they never push artist names out.
+  const litByGenre = new Map();
+  L.nodes.forEach((n, k) => {
+    if (ever ? data.first[k] <= t : tasteValue(data, k, t) > 0.05) litByGenre.set(n.g, (litByGenre.get(n.g) || 0) + 1);
+  });
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const zf = Math.max(14, Math.min(24, w / 45)) * Math.min(2, Math.sqrt(taste.zoom.k));
+  ctx.font = `800 ${zf}px Inter, system-ui, sans-serif`;
+  const zoneBoxes = [];
+  for (const r of L.regions) {
+    if ((litByGenre.get(r.g) || 0) < 3) continue;
+    const [x, y] = tasteXY(r);
+    const tw = ctx.measureText(r.name).width;
+    const b = { x0: x - tw / 2, x1: x + tw / 2, y0: y - zf / 2, y1: y + zf / 2 };
+    if (zoneBoxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0)) continue;
+    zoneBoxes.push(b);
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = genreColor(r.g);
+    ctx.fillText(r.name, x, y);
+  }
+  ctx.globalAlpha = 1;
+
+  // Dots: unheard (or, in "Last 30 days", quiet) artists stay as faint dots so the map's shape is always there.
+  const live = [];
+  L.nodes.forEach((n, k) => {
+    const [x, y] = tasteXY(n);
+    const v = tasteValue(data, k, t);
+    const heard = data.first[k] <= t;
+    if (!(ever ? heard : v > 0.05)) {
+      ctx.globalAlpha = heard ? 0.35 : 0.18;
+      ctx.fillStyle = heard ? color(n) : c.muted;
+      ctx.beginPath();
+      ctx.arc(x, y, (heard ? 2.6 : 2) * zs, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    live.push({ n, x, y, v });
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = color(n);
+    ctx.beginPath();
+    ctx.arc(x, y, (2.4 + 12 * Math.sqrt(Math.max(0, v) / maxVal)) * zs, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Names for the biggest lit artists, skipping any that would overlap.
+  const boxes = [];
+  const free = (b) => !boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+  ctx.lineJoin = "round";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+  live.sort((a, b) => b.v - a.v);
+  for (const p of live.slice(0, TASTE_NAMES)) {
+    if (p.x < -20 || p.x > w + 20 || p.y < 70 || p.y > h + 20) continue;
+    const tw = ctx.measureText(p.n.name).width;
+    const lx = Math.min(Math.max(p.x, tw / 2 + 6), w - tw / 2 - 6);
+    const b = { x0: lx - tw / 2, x1: lx + tw / 2, y0: p.y - 22, y1: p.y - 8 };
+    if (!free(b)) continue;
+    boxes.push(b);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = c.bg;
+    ctx.strokeText(p.n.name, lx, p.y - 12);
+    ctx.fillStyle = c.text;
+    ctx.fillText(p.n.name, lx, p.y - 12);
+  }
+
+  if (taste.hover >= 0) {
+    const [x, y] = tasteXY(L.nodes[taste.hover]);
+    ctx.strokeStyle = c.text;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // The current date (like the race) and how many artists are lit.
+  ctx.fillStyle = c.bg;
+  ctx.fillRect(0, 0, w, 56);
+  ctx.textAlign = "left";
+  ctx.fillStyle = c.text;
+  ctx.font = `600 ${Math.max(22, Math.min(36, w / 28))}px Fraunces, Georgia, serif`;
+  ctx.fillText(new Date(offToDayStr(data.lo + Math.floor(t)) + "T00:00:00Z").toLocaleDateString(undefined, {
+    timeZone: "UTC", year: "numeric", month: "short", day: "numeric",
+  }), 14, 42);
+  const lit = ever ? data.first.filter((f) => f <= t).length : live.length;
+  ctx.textAlign = "right";
+  ctx.fillStyle = c.muted;
+  ctx.font = `${fs + 1}px Inter, system-ui, sans-serif`;
+  ctx.fillText(`${fmtNum(lit)} of ${fmtNum(L.nodes.length)} artists ${ever ? "heard so far" : "played in the last 30 days"}`, w - 14, 38);
+}
+
+function tasteSyncControls() {
+  const data = taste.data, N = data ? data.N : 1;
+  const scrub = document.getElementById("taste-scrub");
+  scrub.min = String(data ? data.start : 0);
+  scrub.max = String(N - 1);
+  if (!taste.scrubbing) scrub.value = String(taste.t);
+  document.getElementById("taste-play").textContent = taste.playing ? "Pause" : taste.t >= N - 1 ? "Replay" : "Play";
+}
+
+function tasteFrame(now) {
+  if (!taste.playing || !taste.data) return;
+  const dt = Math.min((now - taste.last) / 1000, 0.1);
+  taste.last = now;
+  const end = taste.data.N - 1;
+  taste.t = Math.min(end, taste.t + (Math.max(1, end - taste.data.start) / RACE_PLAY_SECONDS) * dt);
+  if (taste.t >= end) taste.playing = false;
+  drawTaste();
+  tasteSyncControls();
+  if (taste.playing) taste.raf = requestAnimationFrame(tasteFrame);
+}
+
+function tastePlay() {
+  if (!taste.data) return;
+  if (taste.t >= taste.data.N - 1) taste.t = taste.data.start; // Replay from the start
+  taste.playing = true;
+  taste.last = performance.now();
+  cancelAnimationFrame(taste.raf);
+  taste.raf = requestAnimationFrame(tasteFrame);
+  tasteSyncControls();
+}
+
+function tastePause() {
+  taste.playing = false;
+  cancelAnimationFrame(taste.raf);
+  tasteSyncControls();
+}
+
+/** (Re)build for the current date range, resting on the latest day until Play is pressed. The layout
+ * (~0.4 s of force simulation) is only computed once the section is about to scroll into view. */
+function renderTasteMap() {
+  const section = document.getElementById("taste-map");
+  section.hidden = !tasteAvailable();
+  document.getElementById("toc-taste").hidden = section.hidden;
+  if (section.hidden) return;
+  tastePause();
+  if (!taste.layout && "IntersectionObserver" in window) {
+    if (taste.waiting) return;
+    taste.waiting = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      taste.waiting.disconnect();
+      tasteLayout();
+      renderTasteMap();
+    }, { rootMargin: "600px 0px" });
+    taste.waiting.observe(section);
+    return;
+  }
+  tasteLayout();
+  taste.data = buildTasteData();
+  taste.t = taste.data ? taste.data.N - 1 : 0;
+  tasteResize();
+  drawTaste();
+  tasteSyncControls();
+  renderDateTicks(document.getElementById("taste-ticks"), taste.data);
+  const L = taste.layout;
+  document.getElementById("taste-legend").innerHTML =
+    L.legend.map((g) => `<span><i style="background:${genreColor(g)}"></i>${escHtml(DATA.genres[g])}</span>`).join("") +
+    (L.hasNoGenre ? `<span><i style="background:${WEB_NO_GENRE}"></i>no genre</span>` : "");
+}
+
+function wireTasteMap() {
+  document.querySelector('.seg[data-taste="mode"]').addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-v]");
+    if (!btn) return;
+    e.currentTarget.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    taste.mode = btn.dataset.v;
+    drawTaste();
+  });
+  document.getElementById("taste-play").addEventListener("click", () => (taste.playing ? tastePause() : tastePlay()));
+  const scrub = document.getElementById("taste-scrub");
+  scrub.addEventListener("input", (e) => {
+    taste.t = +e.target.value;
+    tastePause();
+    drawTaste();
+  });
+  scrub.addEventListener("pointerdown", () => (taste.scrubbing = true));
+  window.addEventListener("pointerup", () => (taste.scrubbing = false));
+  window.addEventListener("pointercancel", () => (taste.scrubbing = false));
+
+  // Wheel zooms about the cursor, dragging pans, Reset view restores the fitted view.
+  const canvas = document.getElementById("c-taste");
+  const tip = document.getElementById("taste-tip");
+  const redraw = () => { if (!taste.playing) drawTaste(); };
+  document.getElementById("taste-reset").addEventListener("click", () => {
+    taste.zoom = { k: 1, x: 0, y: 0 };
+    redraw();
+  });
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top, z = taste.zoom;
+    const k2 = Math.max(0.6, Math.min(14, z.k * Math.exp(-e.deltaY * 0.0015)));
+    taste.zoom = { k: k2, x: mx - (mx - z.x) * (k2 / z.k), y: my - (my - z.y) * (k2 / z.k) };
+    tip.hidden = true;
+    redraw();
+  }, { passive: false });
+  let drag = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    drag = { px: e.clientX, py: e.clientY, x: taste.zoom.x, y: taste.zoom.y };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    tip.hidden = true;
+    taste.zoom = { k: taste.zoom.k, x: drag.x + e.clientX - drag.px, y: drag.y + e.clientY - drag.py };
+    redraw();
+  });
+  canvas.addEventListener("pointerup", () => (drag = null));
+  canvas.addEventListener("pointercancel", () => (drag = null));
+
+  canvas.addEventListener("mousemove", (e) => {
+    if (!taste.data || !taste.view || e.buttons) return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = -1, bd = 12 * 12;
+    taste.layout.nodes.forEach((n, k) => {
+      const [x, y] = tasteXY(n);
+      const dd = (x - mx) ** 2 + (y - my) ** 2;
+      if (dd < bd) { bd = dd; best = k; }
+    });
+    if (best !== taste.hover) {
+      taste.hover = best;
+      redraw();
+    }
+    if (best < 0) return void (tip.hidden = true);
+    const n = taste.layout.nodes[best], a = DATA.artists[n.i];
+    const f = taste.data.first[best];
+    tip.innerHTML = `<strong>${escHtml(n.name)}</strong><br>${fmtNum(tasteCum(taste.data, best, taste.data.N))} min in this range` +
+      (n.g >= 0 ? `<br>${escHtml(DATA.genres[n.g])}${a.gi ? " (from similar artists)" : ""}` : "") +
+      (f < Infinity ? `<br>First played ${fmtHeatDate(offToDayStr(taste.data.lo + f))}` : "");
+    tip.hidden = false;
+    placeTip(tip, mx, my, r.width, r.height);
+  });
+  canvas.addEventListener("mouseleave", () => {
+    taste.hover = -1;
+    tip.hidden = true;
+    redraw();
+  });
+  const host = canvas.parentElement;
+  if ("ResizeObserver" in window) {
+    new ResizeObserver(() => {
+      if (host.clientWidth && (host.clientWidth !== taste.w || host.clientHeight !== taste.h)) {
+        tasteResize();
+        drawTaste();
+      }
+    }).observe(host);
+  }
 }
 
 bootstrap();

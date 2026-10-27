@@ -22,6 +22,7 @@
         <a href="#heatmap">Heatmap</a>
         <a href="#artist">Artist Dive</a>
         <a href="#artist-web">Artist Web</a>
+        <a href="#taste-map" id="toc-taste" hidden>Taste Map</a>
         <a href="#recent-plays">Recent Plays</a>
         <a href="#rankings">Rankings</a>
       </div>
@@ -207,6 +208,36 @@
       </div>
       <div class="web-legend" id="web-legend"></div>
       <div class="web-tip" id="web-tip" hidden></div>
+    </div>
+    </section>
+
+    <section id="taste-map" class="anchor-section" hidden>
+    <div class="section-title">
+      <h2>Taste Map</h2>
+      <span>Your top artists, placed so that artists Last.fm calls similar sit together</span>
+    </div>
+    <div class="chart-card chart-card--full">
+      <div class="race-head">
+        <h3>Where Your Listening Lives</h3>
+        <button type="button" id="taste-play">Play</button>
+      </div>
+      <div class="race-controls">
+        <div class="seg-group" role="group" aria-labelledby="taste-mode-lbl">
+          <span class="seg-label" id="taste-mode-lbl">Show</span>
+          <div class="seg" data-taste="mode">
+            <button type="button" data-v="ever" aria-pressed="true">All so far</button>
+            <button type="button" data-v="recent" aria-pressed="false">Last 30 days</button>
+          </div>
+        </div>
+        <button type="button" class="secondary" id="taste-reset">Reset view</button>
+      </div>
+      <div class="race-host taste-host">
+        <canvas id="c-taste" role="img" aria-label="Map of your top artists arranged by similarity, lighting up over time"></canvas>
+        <div class="web-tip" id="taste-tip" hidden></div>
+      </div>
+      <input type="range" id="taste-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />
+      <div class="race-ticks" id="taste-ticks" aria-hidden="true"></div>
+      <div class="web-legend" id="taste-legend"></div>
     </div>
     </section>
 

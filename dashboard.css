@@ -684,7 +684,7 @@ footer {
 /* ---------- Animated line + artist web ---------- */
 .race-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.7rem; }
 .race-head h3 { margin: 0; }
-#race-play { min-width: 5.6rem; }
+#race-play, #taste-play { min-width: 5.6rem; }
 .race-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem; margin-bottom: 0.8rem; }
 .seg-group { display: flex; align-items: center; gap: 0.5rem; }
 .seg-label { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
@@ -751,5 +751,7 @@ footer {
 .river-axis { fill: var(--muted); font: 11px var(--font-body); }
 .river-year { stroke: var(--border); stroke-width: 1; }
 .river-note { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
-#race-scrub { width: 100%; margin: 0.7rem 0 0.3rem; accent-color: var(--accent-fuchsia); }
+#race-scrub, #taste-scrub { width: 100%; margin: 0.7rem 0 0.3rem; accent-color: var(--accent-fuchsia); }
+.taste-host { height: clamp(420px, 60vw, 680px); cursor: grab; }
+.taste-host canvas:active { cursor: grabbing; }
 .race-ticks { display: flex; justify-content: space-between; margin: 0 0.3rem 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
