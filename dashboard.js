@@ -837,7 +837,7 @@ function buildRaceData() {
   }
 
   const artists = pool.filter((a) => a.shown.includes(1));
-  artists.forEach((a, i) => (a.color = `hsl(${(i * 137.508) % 360} 85% 63%)`));
+  artists.forEach((a, i) => (a.color = `hsl(${(i * 137.508) % 360} 68% 42%)`));
   // Start just before the first visible listen instead of at the beginning of the range.
   let first = N - 1;
   for (const a of artists) {
@@ -884,6 +884,14 @@ function raceScales(data, win) {
   return out;
 }
 
+/** Canvas colours, read once from the page's CSS tokens so the chart matches the theme. */
+function raceColors() {
+  if (race.colors) return race.colors;
+  const css = getComputedStyle(document.documentElement);
+  const tok = (name) => css.getPropertyValue(name).trim();
+  return (race.colors = { bg: tok("--card-hover"), text: tok("--text"), muted: tok("--muted"), grid: tok("--border-soft") });
+}
+
 function raceResize() {
   const canvas = document.getElementById("c-race");
   const host = canvas.parentElement;
@@ -901,11 +909,12 @@ function drawRace() {
   const data = race.data;
   if (!ctx) return;
   const { w, h } = race;
+  const c = raceColors();
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "#12061f";
+  ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, w, h);
   if (!data) {
-    ctx.fillStyle = "#c9b8e0";
+    ctx.fillStyle = c.muted;
     ctx.font = "14px Inter, system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("Pick a date range of at least two days.", w / 2, h / 2);
@@ -944,13 +953,13 @@ function drawRace() {
     ctx.globalAlpha = alpha;
     for (let val = 0; val <= scale; val += u) {
       const y = yOf(val);
-      ctx.strokeStyle = "rgba(201,184,224,0.22)";
+      ctx.strokeStyle = c.grid;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x0, y);
       ctx.lineTo(x1 + 8, y);
       ctx.stroke();
-      ctx.fillStyle = "#c9b8e0";
+      ctx.fillStyle = c.muted;
       ctx.textAlign = "right";
       ctx.fillText(compact.format(val), x0 - 10, y);
     }
@@ -970,12 +979,12 @@ function drawRace() {
     if (j < 0 || (lo + j) % Math.round(interval) !== 0) continue;
     const x = xOf(j);
     if (x < x0 + 2) continue;
-    ctx.strokeStyle = "rgba(201,184,224,0.16)";
+    ctx.strokeStyle = c.grid;
     ctx.beginPath();
     ctx.moveTo(x, yTop);
     ctx.lineTo(x, yBot);
     ctx.stroke();
-    ctx.fillStyle = "#c9b8e0";
+    ctx.fillStyle = c.muted;
     ctx.fillText(shortDate(lo + j), x, yBot + fs + 6);
   }
 
@@ -1055,7 +1064,7 @@ function drawRace() {
     } else {
       ctx.fillStyle = L.a.color;
       ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-      ctx.fillStyle = "#12061f";
+      ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
       ctx.fillText((L.a.name.trim()[0] || "?").toUpperCase(), cx, cy + 1);
       ctx.textAlign = "left";
@@ -1075,15 +1084,15 @@ function drawRace() {
   }
 
   // Axes + title + big date.
-  ctx.strokeStyle = "#f3e8ff";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = c.muted;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(x0, yTop);
   ctx.lineTo(x0, yBot);
   ctx.lineTo(x1 + 8, yBot);
   ctx.stroke();
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = "#c9b8e0";
+  ctx.fillStyle = c.muted;
   ctx.font = `${fs + 1}px Inter, system-ui, sans-serif`;
   ctx.fillText(
     `Top ${data.top} ${data.top === 1 ? RACE_KIND_LABEL[data.kind].slice(0, -1) : RACE_KIND_LABEL[data.kind]} · ` +
@@ -1091,7 +1100,7 @@ function drawRace() {
     x0 + 6,
     26
   );
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = c.text;
   ctx.font = `600 ${Math.max(24, Math.min(46, w / 24))}px Fraunces, Georgia, serif`;
   const dateStr = new Date(offToDayStr(lo + d) + "T00:00:00Z").toLocaleDateString(undefined, {
     timeZone: "UTC",
