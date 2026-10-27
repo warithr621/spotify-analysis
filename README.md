@@ -34,7 +34,7 @@ SPOTIFY_CLIENT_ID=your_client_id_here
 
 ### Last.fm (optional)
 
-The Taste River colours your listening by genre using artist tags from Last.fm. To turn it on, create an API account at [last.fm/api/account/create](https://www.last.fm/api/account/create) (leave the callback URL blank), add the API key to `.env`, and fill the cache once (about 3 minutes for 400 artists):
+The Taste River shows your listening by genre, worked out from artist tags on Last.fm. To turn it on, create an API account at [last.fm/api/account/create](https://www.last.fm/api/account/create) (leave the callback URL blank), add the API key to `.env`, and fill the cache once (about 3 minutes for 400 artists):
 
 ```bash
 LASTFM_API_KEY=your_key

@@ -1271,9 +1271,9 @@ function wireRaceControls() {
   }
 }
 
-/* ---------- Taste River (d3 streamgraph of Last.fm tags) ---------- */
+/* ---------- Taste River (d3 streamgraph of genres from Last.fm tags) ---------- */
 
-let riverCount = 12;
+let riverCount = 12; // 0 = all genres
 
 /** Place a tooltip near (x, y) inside a w x h box, flipping or clamping so it is never cut off. */
 function placeTip(tip, x, y, w, h) {
@@ -1290,12 +1290,14 @@ const fmtMonth = (ym) =>
 
 function renderRiver() {
   const card = document.getElementById("river-card");
-  card.hidden = !(DATA.artists.some((a) => a.tags && a.tags.length) && typeof d3 !== "undefined");
+  card.hidden = !((DATA.genres || []).length && typeof d3 !== "undefined");
   if (card.hidden) return;
   const host = document.getElementById("river-host");
   const tip = document.getElementById("river-tip");
+  const title = document.getElementById("river-title");
   tip.hidden = true;
   host.innerHTML = "";
+  title.textContent = "Taste River";
 
   const lo = dayStrToOff(state.fromDay),
     hi = dayStrToOff(state.toDay);
@@ -1325,27 +1327,33 @@ function renderRiver() {
   }
   const B = labels.length;
 
-  // Minutes per tag per bucket.
+  // Minutes per genre per bucket (each artist has at most one genre, `g`).
   const byTag = new Map();
   for (const a of DATA.artists) {
-    if (!a.tags || !a.tags.length) continue;
+    if (a.g == null) continue;
+    const g = DATA.genres[a.g];
+    let arr = byTag.get(g);
+    if (!arr) byTag.set(g, (arr = new Float64Array(B)));
     for (const row of a.days) {
       if (row[0] < lo || row[0] > hi) continue;
-      const b = bIdx[row[0] - lo];
-      for (const tg of a.tags) {
-        let arr = byTag.get(tg);
-        if (!arr) byTag.set(tg, (arr = new Float64Array(B)));
-        arr[b] += row[1] / 60000;
-      }
+      arr[bIdx[row[0] - lo]] += row[1] / 60000;
     }
   }
-  const keys = [...byTag]
+  const ranked = [...byTag]
     .map(([tg, arr]) => [tg, arr.reduce((s, v) => s + v, 0)])
-    .sort((x, y) => y[1] - x[1])
-    .slice(0, riverCount)
-    .map(([tg]) => tg);
+    .filter(([, total]) => total > 0)
+    .sort((x, y) => y[1] - x[1]);
+  // Grey out "Top N" when the range has fewer than N genres; a greyed-out choice falls back to All.
+  const seg = document.getElementById("river-count");
+  for (const btn of seg.querySelectorAll("button")) btn.disabled = +btn.dataset.v > ranked.length;
+  if (riverCount > ranked.length) {
+    riverCount = 0;
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === "0")));
+  }
+  const keys = ranked.slice(0, riverCount || ranked.length).map(([tg]) => tg);
+  if (keys.length) title.textContent = `Taste River: ${keys.length} ${keys.length === 1 ? "Genre" : "Genres"} Plotted`;
   if (!keys.length) {
-    host.innerHTML = `<p class="web-empty">No tagged listening in this range.</p>`;
+    host.innerHTML = `<p class="web-empty">No listening with a known genre in this range.</p>`;
     return;
   }
   // Drop half-finished buckets at either end; they would pinch the stream to a point.
@@ -1369,10 +1377,11 @@ function renderRiver() {
     [H - m.b, m.t]
   );
   const area = d3.area().x((_, i) => x(i)).y0((d) => y(d[0])).y1((d) => y(d[1])).curve(d3.curveBasis);
-  const color = (k) => `hsl(${(keys.indexOf(k) * 137.508) % 360} 70% 62%)`;
+  // Colour by all-time genre rank, so a genre keeps its colour across date ranges.
+  const color = (k) => `hsl(${(DATA.genres.indexOf(k) * 137.508) % 360} 70% 62%)`;
 
   const svg = d3.select(host).append("svg").attr("width", W).attr("height", H)
-    .attr("role", "img").attr("aria-label", "Streamgraph of your top Last.fm tags over time");
+    .attr("role", "img").attr("aria-label", "Streamgraph of your top genres over time");
 
   // A vertical line at every January 1st, behind the streams (like the race's date lines).
   const years = [];

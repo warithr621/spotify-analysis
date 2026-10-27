@@ -116,14 +116,15 @@
       </div>
       <div class="chart-card chart-card--full" id="river-card" hidden>
         <div class="race-head">
-          <h3>Taste River</h3>
+          <h3 id="river-title">Taste River</h3>
         </div>
         <div class="race-controls">
           <div class="seg-group" role="group" aria-labelledby="river-count-lbl">
-            <span class="seg-label" id="river-count-lbl">Tags</span>
+            <span class="seg-label" id="river-count-lbl">Genres</span>
             <div class="seg" id="river-count">
               <button type="button" data-v="12" aria-pressed="true">Top 12</button>
               <button type="button" data-v="24" aria-pressed="false">Top 24</button>
+              <button type="button" data-v="0" aria-pressed="false">All</button>
             </div>
           </div>
         </div>
@@ -131,7 +132,7 @@
           <div class="river-host" id="river-host"></div>
           <div class="web-tip" id="river-tip" hidden></div>
         </div>
-        <p class="river-note">The width of a stream is how much you listened to a particular Last.fm tag (an artist can count towards multiple tags).</p>
+        <p class="river-note">The width of a stream is how much you listened to a genre. Each artist you listen to counts towards one genre according to their Last.fm tags.</p>
       </div>
     </div>
     </section>

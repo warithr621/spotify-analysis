@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import genres
 import spotify_sync
 
 # Global display timezone. All user-facing day/month/year buckets, the heatmap,
@@ -206,6 +207,22 @@ def load_lastfm_cache() -> dict:
             return json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def build_lastfm_links(top_artists: list[str], lastfm: dict) -> list[list]:
+    """`[i, j, match]` (i < j, indices into `top_artists`) for Last.fm
+    similar-artist pairs where both artists are in the list. When both
+    directions are cached the stronger match wins."""
+    idx = {a.lower(): i for i, a in enumerate(top_artists)}
+    best: dict[tuple[int, int], float] = {}
+    for name, i in idx.items():
+        for other, match in (lastfm.get(f"artist:{name}") or {}).get("similar") or []:
+            j = idx.get(str(other).lower())
+            if j is None or j == i:
+                continue
+            key = (min(i, j), max(i, j))
+            best[key] = max(best.get(key, 0.0), float(match))
+    return [[i, j, round(m, 3)] for (i, j), m in sorted(best.items())]
 
 
 def build_artist_sessions(
@@ -453,6 +470,20 @@ def main() -> None:
         artists_out.append(entry)
 
     graph_artists = top_artists[:GRAPH_ARTIST_CAP]
+
+    # One genre per top artist (tag families merged, specific over generic;
+    # untagged artists borrow from their Last.fm neighbours). Artists outside
+    # the top GRAPH_ARTIST_CAP have no `g`.
+    genre_names, genre_idx, genre_inferred = genres.assign_genres(
+        [e.get("tags", []) for e in artists_out[:GRAPH_ARTIST_CAP]],
+        [e["ms"] / 60000 for e in artists_out[:GRAPH_ARTIST_CAP]],
+        build_lastfm_links(graph_artists, lastfm_cache),
+    )
+    for e, g, inferred in zip(artists_out, genre_idx, genre_inferred):
+        if g is not None:
+            e["g"] = g
+            if inferred:
+                e["gi"] = 1
     artist_sessions = build_artist_sessions(
         play_log,
         {a: i for i, a in enumerate(graph_artists)},
@@ -579,6 +610,7 @@ def main() -> None:
         "recent_streams": recent_streams,
         "artist_sessions": artist_sessions,
         "graph_artists": graph_artists,
+        "genres": genre_names,
         "notes": (
             "Spotify Extended Streaming History does not include genre metadata; podcast/audiobook rows excluded. "
             "Tracks and albums collapse duplicate rows that match the same normalized title + performer "
