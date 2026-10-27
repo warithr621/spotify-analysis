@@ -49,13 +49,15 @@ http://127.0.0.1:8765/
 From the dashboard, three buttons are available in the top-right corner:
 - **Re-authorize** — run the Spotify OAuth flow and store a new refresh token
 - **Refresh** — pull the latest data from the cloud data repo and rebuild the dashboard (no Spotify API call)
-- **Rescrape** — fetch new plays from Spotify, push them to the cloud data repo, and rebuild the dashboard
+- **Rescrape** — fetch new plays from Spotify, fetch album art and artist photos for your top artists/albums/tracks, push the new plays to the cloud data repo, and rebuild the dashboard
 
 # Extended History
 
 Spotify's API only lets you fetch the 50 most recently played songs. If you want your all-time statistics, first request your Extended Streaming History from [this link](https://www.spotify.com/us/account/privacy/). After a few days (it should be way less than the advertised 30 days), you should get emailed a ZIP file with several JSON files, all named something like `Streaming_History_Audio_2026.json`.
 
 Put all these JSONs in the `music-history/` subfolder of this directory and rerun the server — the app will automatically read them and include them in the statistics.
+
+If you use [Cloud Sync](#cloud-sync-always-on-free), you can also upload the export JSONs to the root of your private data repo. **Refresh** and **Rescrape** download any of them that are missing from your local `music-history/` folder, which is handy when running the dashboard on more than one computer. Files you already have locally are never overwritten.
 
 # Cloud Sync (always-on, free)
 
@@ -91,7 +93,7 @@ This needs a **separate private repo** to hold your live data (so personal liste
 
 **Every ~6 months:** Spotify refresh tokens expire 6 months after authorization (refreshing does not reset the clock). Just click **Re-authorize** and approve in the browser — the new token is pushed to the data repo automatically, and the next cloud run picks it up. Optionally update the `SPOTIFY_AUTH_DATE` variable so the workflow's expiry warning resets.
 
-> **Note on the 60-day rule:** GitHub disables workflows with no recent activity after 60 days. `keepalive.yml` ships a small heartbeat commit every ~20 days to prevent that. Unlike a `schedule:` trigger, `workflow_dispatch` is not affected by this rule — but the keepalive is still useful to keep the repo active.
+> **Note on the 60-day rule:** GitHub disables *scheduled* workflows in repos with no recent activity after 60 days. The sync workflow is triggered by `workflow_dispatch` (from cron-job.org) rather than a `schedule:` trigger, so the rule doesn't apply and no keepalive commits are needed.
 
 # Background Serving (macOS)
 
@@ -108,3 +110,5 @@ These are Mac-only instructions to have the dashboard server start automatically
 	launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.USERNAME.spotify-serve.plist
 	launchctl kickstart -k gui/$(id -u)/com.USERNAME.spotify-serve
 	```
+
+After pulling new code, run that last `kickstart` command again to restart the server. (Changes to `build_dashboard.py` are picked up automatically, but changes to any other Python file need a restart.) Only one server can run at a time: if the background one is running, `python serve.py` will exit with an error saying the port is already in use.
