@@ -79,6 +79,14 @@
       <span>Minutes streamed &amp; play counts over time</span>
     </div>
     <div class="chart-stack">
+      <div class="chart-card chart-card--full chart-card--tall">
+        <h3>Minutes by month</h3>
+        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-month"></canvas></div>
+      </div>
+      <div class="chart-card chart-card--full chart-card--tall">
+        <h3>Minutes by year</h3>
+        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-year"></canvas></div>
+      </div>
       <div class="chart-card chart-card--full">
         <div class="anim-head">
           <h3>Top listens over time</h3>
@@ -123,14 +131,6 @@
         <div class="race-host"><canvas id="c-race" role="img" aria-label="Animated line graph of top artists' minutes over time"></canvas></div>
         <input type="range" id="race-scrub" min="0" max="1" step="0.01" value="0" aria-label="Scrub through time" />
         <div class="race-ticks" id="race-ticks" aria-hidden="true"></div>
-      </div>
-      <div class="chart-card chart-card--full chart-card--tall">
-        <h3>Minutes by month</h3>
-        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-month"></canvas></div>
-      </div>
-      <div class="chart-card chart-card--full chart-card--tall">
-        <h3>Minutes by year</h3>
-        <div class="chart-canvas-wrap chart-canvas-wrap--line"><canvas id="c-year"></canvas></div>
       </div>
     </div>
     </section>
