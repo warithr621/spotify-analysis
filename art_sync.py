@@ -19,6 +19,7 @@ import logging
 import os
 import tempfile
 from collections import defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
@@ -38,6 +39,9 @@ TOP_N = 12
 # Artists also appear as photo nodes in the Artist web (up to its "Top 80"
 # setting) and as line-end icons in the Top listens race.
 ARTIST_TOP_N = 80
+# A search with no verified match is recorded as `miss:<key>` -> ISO date and not
+# retried until this long has passed, so it doesn't cost a request every Rescrape.
+MISS_RETRY_AFTER = timedelta(days=30)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,27 @@ def _save_art_cache(cache: dict) -> None:
         except OSError:
             pass
         raise
+
+
+def _recent_miss(cache: dict, key: str) -> bool:
+    try:
+        return date.today() - date.fromisoformat(cache.get(f"miss:{key}", "")) < MISS_RETRY_AFTER
+    except ValueError:
+        return False
+
+
+def _needs_art(cache: dict, key: str) -> bool:
+    return key not in cache and not _recent_miss(cache, key)
+
+
+def _store(cache: dict, key: str, images: list) -> bool:
+    """Cache the smallest image for `key`, or record a miss. Returns True if art was found."""
+    if images:
+        cache[key] = images[-1]["url"]
+        cache.pop(f"miss:{key}", None)
+        return True
+    cache[f"miss:{key}"] = date.today().isoformat()
+    return False
 
 
 def _top_entities_needing_art(
@@ -104,9 +129,9 @@ def _top_entities_needing_art(
     top_album_keys = sorted(album_ms.keys(), key=lambda k: -album_ms[k])[:TOP_N]
     top_artist_names = sorted(artist_ms.keys(), key=lambda a: -artist_ms[a])[:ARTIST_TOP_N]
 
-    need_tracks = {k: track_display[k] for k in top_track_keys if f"track:{k}" not in cache}
-    need_albums = {k: album_display[k] for k in top_album_keys if f"album:{k}" not in cache}
-    need_artists = [a for a in top_artist_names if f"artist:{a.lower()}" not in cache]
+    need_tracks = {k: track_display[k] for k in top_track_keys if _needs_art(cache, f"track:{k}")}
+    need_albums = {k: album_display[k] for k in top_album_keys if _needs_art(cache, f"album:{k}")}
+    need_artists = [a for a in top_artist_names if _needs_art(cache, f"artist:{a.lower()}")]
     return need_tracks, need_albums, need_artists
 
 
@@ -145,9 +170,7 @@ def refresh_art_cache() -> tuple[bool, str]:
             try:
                 item = _search(headers, f"{title} {artist}", "track", lambda it: _has_artist(it, artist))
                 images = ((item or {}).get("album") or {}).get("images") or []
-                if images:
-                    cache[f"track:{tkey}"] = images[-1]["url"]
-                    fetched += 1
+                fetched += _store(cache, f"track:{tkey}", images)
             except requests.RequestException as e:
                 logger.warning("Track art search failed for %r: %s", title, e)
 
@@ -155,9 +178,7 @@ def refresh_art_cache() -> tuple[bool, str]:
             try:
                 item = _search(headers, f"{album} {artist}", "album", lambda it: _has_artist(it, artist))
                 images = (item or {}).get("images") or []
-                if images:
-                    cache[f"album:{akey}"] = images[-1]["url"]
-                    fetched += 1
+                fetched += _store(cache, f"album:{akey}", images)
             except requests.RequestException as e:
                 logger.warning("Album art search failed for %r: %s", album, e)
 
@@ -165,9 +186,7 @@ def refresh_art_cache() -> tuple[bool, str]:
             try:
                 item = _search(headers, name, "artist", lambda it: (it.get("name") or "").lower() == name.lower())
                 images = (item or {}).get("images") or []
-                if images:
-                    cache[f"artist:{name.lower()}"] = images[-1]["url"]
-                    fetched += 1
+                fetched += _store(cache, f"artist:{name.lower()}", images)
             except requests.RequestException as e:
                 logger.warning("Artist art search failed for %r: %s", name, e)
 
